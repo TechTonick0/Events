@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Calculator } from 'lucide-react';
+import { Calculator, Trash2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import Button from '../../components/ui/Button';
@@ -66,12 +66,13 @@ const AccountingPage = () => {
         const entry = {
             id: uuidv4(),
             category: newItem.category,
+            payee: newItem.payee,
             amount: parseFloat(newItem.amount),
             type: newItem.type,
             phase: phase
         };
         updateEventLedger([...entries, entry]);
-        setNewItem({ ...newItem, amount: '', category: '' });
+        setNewItem({ ...newItem, amount: '', category: '', payee: '' });
     };
 
     const addVariableExpense = () => {
