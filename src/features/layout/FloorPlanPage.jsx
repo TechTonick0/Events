@@ -60,6 +60,7 @@ const FloorPlanPage = () => {
     // State Mirrors for Event Handlers (Prevents Stale Closures during rapid events)
     const scaleRef = useRef(1);
     const panRef = useRef({ x: 0, y: 0 });
+    const isDraggingTableRef = useRef(false); // Validates drag state synchronously
 
     // Sync Refs with State
     useEffect(() => {
@@ -292,6 +293,7 @@ const FloorPlanPage = () => {
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
         setIsDraggingTable(true);
+        isDraggingTableRef.current = true; // Sync update
         // Don't select immediately. Wait for Up to determine click vs drag.
         // However, we MUST track which table is potentially being dragged.
         setSelectedTableId(table.id);
@@ -308,6 +310,7 @@ const FloorPlanPage = () => {
             setIsZooming(true);
             setIsPanning(false);
             setIsDraggingTable(false);
+            isDraggingTableRef.current = false;
             lastTouchDistance.current = getTouchDistance(e.touches);
             return;
         }
@@ -372,7 +375,7 @@ const FloorPlanPage = () => {
             return;
         }
 
-        if (!isDraggingTable && !isPanning && draggingVertexIndex === null) return;
+        if (!isDraggingTableRef.current && !isPanning && draggingVertexIndex === null) return;
 
         if (e.touches && e.touches.length > 1) return; // Don't pan if multi-touch
 
@@ -430,7 +433,7 @@ const FloorPlanPage = () => {
             newBoundary[draggingVertexIndex] = { x: newX, y: newY };
             updateEventSettings({ boundary: newBoundary });
             return; // Done
-        } else if (isDraggingTable && selectedTableId) {
+        } else if (isDraggingTableRef.current && selectedTableId) {
             e.preventDefault(); // Stop scroll when dragging table
             const t = tables.find(t => t.id === selectedTableId);
             const w = t.width || DEFAULT_TABLE_W_FT;
@@ -471,453 +474,457 @@ const FloorPlanPage = () => {
             }
         }
 
-        setIsDraggingTable(false);
-        setIsPanning(false);
-        setIsZooming(false);
-        setDraggingVertexIndex(null); // Stop vertex drag
-        setSnapLines([]); // Clear guides
-        lastTouchDistance.current = null;
-        if (isPanning && !hasMoved.current) {
-            setSelectedTableId(null);
-            setShowEventSettings(false);
-        }
+    }
+}
+
+setIsDraggingTable(false);
+isDraggingTableRef.current = false;
+setIsPanning(false);
+setIsZooming(false);
+setDraggingVertexIndex(null); // Stop vertex drag
+setSnapLines([]); // Clear guides
+lastTouchDistance.current = null;
+if (isPanning && !hasMoved.current) {
+    setSelectedTableId(null);
+    setShowEventSettings(false);
+}
     };
 
-    const getStatusColor = (status, isSelected) => {
-        if (isSelected) return 'var(--primary)';
-        switch (status) {
-            case 'paid': return 'var(--success)';
-            case 'booked': return 'var(--warning)';
-            default: return 'var(--bg-card)';
-        }
+const getStatusColor = (status, isSelected) => {
+    if (isSelected) return 'var(--primary)';
+    switch (status) {
+        case 'paid': return 'var(--success)';
+        case 'booked': return 'var(--warning)';
+        default: return 'var(--bg-card)';
+    }
+};
+
+// --- Event Listeners with Fresh Refs ---
+const handleNativeWheelRef = useRef(handleNativeWheel);
+
+useEffect(() => {
+    handleNativeWheelRef.current = handleNativeWheel;
+});
+
+useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e) => handleNativeWheelRef.current(e);
+
+    // Non-passive listener to allow preventDefault()
+    el.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+        el.removeEventListener('wheel', onWheel);
     };
+}, []);
 
-    // --- Event Listeners with Fresh Refs ---
-    const handleNativeWheelRef = useRef(handleNativeWheel);
+// --- NON-PASSIVE TOUCH LISTENERS (Fixes "Unable to preventDefault" error) ---
+const handleCanvasDownRef = useRef(handleCanvasDown);
+const handleMoveRef = useRef(handleMove);
+const handleUpRef = useRef(handleUp);
 
-    useEffect(() => {
-        handleNativeWheelRef.current = handleNativeWheel;
-    });
+// Keep refs current
+useEffect(() => {
+    handleCanvasDownRef.current = handleCanvasDown;
+    handleMoveRef.current = handleMove;
+    handleUpRef.current = handleUp;
+});
 
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
+useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-        const onWheel = (e) => handleNativeWheelRef.current(e);
+    const onTouchStart = (e) => handleCanvasDownRef.current(e);
+    const onTouchMove = (e) => handleMoveRef.current(e);
+    const onTouchEnd = (e) => handleUpRef.current(e);
 
-        // Non-passive listener to allow preventDefault()
-        el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: false });
 
-        return () => {
-            el.removeEventListener('wheel', onWheel);
-        };
-    }, []);
+    return () => {
+        el.removeEventListener('touchstart', onTouchStart);
+        el.removeEventListener('touchmove', onTouchMove);
+        el.removeEventListener('touchend', onTouchEnd);
+    };
+}, []);
 
-    // --- NON-PASSIVE TOUCH LISTENERS (Fixes "Unable to preventDefault" error) ---
-    const handleCanvasDownRef = useRef(handleCanvasDown);
-    const handleMoveRef = useRef(handleMove);
-    const handleUpRef = useRef(handleUp);
+if (!event) return <div className="page-container">Loading...</div>;
 
-    // Keep refs current
-    useEffect(() => {
-        handleCanvasDownRef.current = handleCanvasDown;
-        handleMoveRef.current = handleMove;
-        handleUpRef.current = handleUp;
-    });
+const selectedTable = getSelectedTable();
 
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-
-        const onTouchStart = (e) => handleCanvasDownRef.current(e);
-        const onTouchMove = (e) => handleMoveRef.current(e);
-        const onTouchEnd = (e) => handleUpRef.current(e);
-
-        el.addEventListener('touchstart', onTouchStart, { passive: false });
-        el.addEventListener('touchmove', onTouchMove, { passive: false });
-        el.addEventListener('touchend', onTouchEnd, { passive: false });
-
-        return () => {
-            el.removeEventListener('touchstart', onTouchStart);
-            el.removeEventListener('touchmove', onTouchMove);
-            el.removeEventListener('touchend', onTouchEnd);
-        };
-    }, []);
-
-    if (!event) return <div className="page-container">Loading...</div>;
-
-    const selectedTable = getSelectedTable();
-
-    return (
-        <div
-            className="page-container"
-            style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                width: '100vw',
-                height: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                paddingTop: '50px', // Space for Fixed Header
-                paddingBottom: '80px', // Space for Fixed Nav
-                paddingLeft: 0,
-                paddingRight: 0,
-                zIndex: 1, // Below header(90)/nav(100)
-                maxWidth: 'none', // Override index.css .page-container limit
-                margin: 0 // Override index.css margin
-            }}
-        >
-            {/* Toolbar */}
-            <div className="glass-panel" style={{
-                padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                borderBottom: '1px solid var(--glass-border)', zIndex: 20, flexShrink: 0
-            }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button variant="ghost" size="sm" onClick={() => navigate('/')} title="Back to Events"><ArrowLeft size={18} /></Button>
-                    <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)', margin: '0 8px' }}></div>
-                    <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(s * 1.2, 5))}><ZoomIn size={18} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(s / 1.2, 0.1))}><ZoomOut size={18} /></Button>
-                    <Button variant="ghost" size="sm" onClick={fitToScreen} title="Fit to Screen"><Maximize size={18} /></Button>
-                    <Button variant="primary" size="sm" onClick={addTable}><Plus size={18} /><span className="hide-mobile" style={{ marginLeft: '6px' }}>Add Table</span></Button>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="hide-mobile" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        {roomWidthFt}ft x {roomHeightFt}ft
-                    </div>
-
-                    <Button
-                        variant={isRoomEditing ? 'primary' : 'outline'}
-                        size="sm"
-                        onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); }}
-                        title="Edit Room Shape"
-                    >
-                        <Maximize size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
-                    </Button>
-                    <Button
-                        variant={showEventSettings ? 'primary' : 'ghost'}
-                        size="sm"
-                        onClick={() => { setShowEventSettings(!showEventSettings); setSelectedTableId(null); }}
-                    >
-                        <Settings size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Settings</span>
-                    </Button>
-                </div>
+return (
+    <div
+        className="page-container"
+        style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            paddingTop: '50px', // Space for Fixed Header
+            paddingBottom: '80px', // Space for Fixed Nav
+            paddingLeft: 0,
+            paddingRight: 0,
+            zIndex: 1, // Below header(90)/nav(100)
+            maxWidth: 'none', // Override index.css .page-container limit
+            margin: 0 // Override index.css margin
+        }}
+    >
+        {/* Toolbar */}
+        <div className="glass-panel" style={{
+            padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            borderBottom: '1px solid var(--glass-border)', zIndex: 20, flexShrink: 0
+        }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/')} title="Back to Events"><ArrowLeft size={18} /></Button>
+                <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)', margin: '0 8px' }}></div>
+                <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(s * 1.2, 5))}><ZoomIn size={18} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(s / 1.2, 0.1))}><ZoomOut size={18} /></Button>
+                <Button variant="ghost" size="sm" onClick={fitToScreen} title="Fit to Screen"><Maximize size={18} /></Button>
+                <Button variant="primary" size="sm" onClick={addTable}><Plus size={18} /><span className="hide-mobile" style={{ marginLeft: '6px' }}>Add Table</span></Button>
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="hide-mobile" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {roomWidthFt}ft x {roomHeightFt}ft
+                </div>
 
-            {/* Canvas Container (Viewport) */}
-            <div
-                ref={containerRef}
+                <Button
+                    variant={isRoomEditing ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); }}
+                    title="Edit Room Shape"
+                >
+                    <Maximize size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
+                </Button>
+                <Button
+                    variant={showEventSettings ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => { setShowEventSettings(!showEventSettings); setSelectedTableId(null); }}
+                >
+                    <Settings size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Settings</span>
+                </Button>
+            </div>
+        </div>
+
+        {/* Canvas Container (Viewport) */}
+        <div
+            ref={containerRef}
+            style={{
+                flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'grab',
+                touchAction: 'none', backgroundColor: '#1a1a1e',
+                // Infinite Grid Effect:
+                backgroundImage: `linear-gradient(#2a2a30 1px, transparent 1px), linear-gradient(90deg, #2a2a30 1px, transparent 1px)`,
+                backgroundSize: `${PX_PER_FT * scale}px ${PX_PER_FT * scale}px`,
+                backgroundPosition: `${pan.x}px ${pan.y}px`,
+            }}
+            onMouseDown={handleCanvasDown}
+            onMouseMove={handleMove}
+            onMouseUp={handleUp}
+            onMouseLeave={handleUp}
+        >
+            {/* SVG Layer for Room Boundary */}
+            {/* SVG Layer for Room Boundary */}
+            <svg
                 style={{
-                    flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'grab',
-                    touchAction: 'none', backgroundColor: '#1a1a1e',
-                    // Infinite Grid Effect:
-                    backgroundImage: `linear-gradient(#2a2a30 1px, transparent 1px), linear-gradient(90deg, #2a2a30 1px, transparent 1px)`,
-                    backgroundSize: `${PX_PER_FT * scale}px ${PX_PER_FT * scale}px`,
-                    backgroundPosition: `${pan.x}px ${pan.y}px`,
+                    position: 'absolute', left: 0, top: 0,
+                    width: '100%', height: '100%',
+                    pointerEvents: 'none', // Let clicks pass through empty areas
+                    zIndex: 0 // SVG Layer behind legacy div
                 }}
-                onMouseDown={handleCanvasDown}
-                onMouseMove={handleMove}
-                onMouseUp={handleUp}
-                onMouseLeave={handleUp}
             >
-                {/* SVG Layer for Room Boundary */}
-                {/* SVG Layer for Room Boundary */}
-                <svg
-                    style={{
-                        position: 'absolute', left: 0, top: 0,
-                        width: '100%', height: '100%',
-                        pointerEvents: 'none', // Let clicks pass through empty areas
-                        zIndex: 0 // SVG Layer behind legacy div
-                    }}
-                >
-                    <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
-                        {/* Room Floor (Polygon) */}
-                        <polygon
-                            points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
-                            fill="rgba(255, 255, 255, 0.03)"
-                            stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
-                            strokeWidth={isRoomEditing ? 4 / scale : 2 / scale}
-                            strokeLinejoin="round"
-                            style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
+                <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
+                    {/* Room Floor (Polygon) */}
+                    <polygon
+                        points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
+                        fill="rgba(255, 255, 255, 0.03)"
+                        stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
+                        strokeWidth={isRoomEditing ? 4 / scale : 2 / scale}
+                        strokeLinejoin="round"
+                        style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
+                    />
+
+                    {/* Snap Guides */}
+                    {isRoomEditing && snapLines.map((line, i) => (
+                        <line
+                            key={i}
+                            x1={line.x1 * PX_PER_FT} y1={line.y1 * PX_PER_FT}
+                            x2={line.x2 * PX_PER_FT} y2={line.y2 * PX_PER_FT}
+                            stroke="var(--primary)"
+                            strokeWidth={1 / scale}
+                            strokeDasharray={`${4 / scale}, ${4 / scale}`}
                         />
+                    ))}
 
-                        {/* Snap Guides */}
-                        {isRoomEditing && snapLines.map((line, i) => (
-                            <line
-                                key={i}
-                                x1={line.x1 * PX_PER_FT} y1={line.y1 * PX_PER_FT}
-                                x2={line.x2 * PX_PER_FT} y2={line.y2 * PX_PER_FT}
-                                stroke="var(--primary)"
-                                strokeWidth={1 / scale}
-                                strokeDasharray={`${4 / scale}, ${4 / scale}`}
-                            />
-                        ))}
-
-                        {/* Wall Measurements */}
-                        {isRoomEditing && boundary.map((p, i) => {
-                            const nextP = boundary[(i + 1) % boundary.length];
-                            const midX = (p.x + nextP.x) / 2;
-                            const midY = (p.y + nextP.y) / 2;
-                            const len = Math.sqrt(Math.pow(nextP.x - p.x, 2) + Math.pow(nextP.y - p.y, 2));
-
-                            return (
-                                <text
-                                    key={i}
-                                    x={midX * PX_PER_FT}
-                                    y={midY * PX_PER_FT}
-                                    fill="white"
-                                    fontSize={12 / scale}
-                                    textAnchor="middle"
-                                    dy={-5 / scale}
-                                    style={{ pointerEvents: 'none', userSelect: 'none', textShadow: '0 0 2px black' }}
-                                >
-                                    {Math.round(len * 10) / 10}ft
-                                </text>
-                            );
-                        })}
-
-                        {/* Vertex Handles (Only in Edit Mode) */}
-                        {isRoomEditing && boundary.map((p, i) => {
-                            const nextP = boundary[(i + 1) % boundary.length];
-                            const midX = (p.x + nextP.x) / 2;
-                            const midY = (p.y + nextP.y) / 2;
-
-                            return (
-                                <React.Fragment key={i}>
-                                    {/* Real Vertex */}
-                                    <circle
-                                        cx={p.x * PX_PER_FT}
-                                        cy={p.y * PX_PER_FT}
-                                        r={10 / scale} // Reduced size (was 20 - too huge)
-                                        fill="var(--primary)"
-                                        stroke="white"
-                                        strokeWidth={2 / scale}
-                                        onMouseDown={(e) => handleVertexDown(e, i)}
-                                        onTouchStart={(e) => handleVertexDown(e, i)}
-                                        onDoubleClick={(e) => { e.stopPropagation(); deleteVertex(i); }}
-                                        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                                    />
-
-                                    {/* Ghost Handle (Add Vertex) */}
-                                    <circle
-                                        cx={midX * PX_PER_FT}
-                                        cy={midY * PX_PER_FT}
-                                        r={6 / scale}
-                                        fill="rgba(255, 255, 255, 0.5)"
-                                        stroke="var(--primary)"
-                                        strokeWidth={1 / scale}
-                                        onClick={(e) => { e.stopPropagation(); insertVertex(i); }}
-                                        onTouchEnd={(e) => { e.stopPropagation(); insertVertex(i); }}
-                                        style={{ cursor: 'copy', pointerEvents: 'auto' }}
-                                    >
-                                        <title>Add Corner</title>
-                                    </circle>
-                                </React.Fragment>
-                            );
-                        })}
-                    </g>
-                </svg>
-
-                {/* Legacy Object Layer (Tables) */}
-                <div
-                    style={{
-                        position: 'absolute', left: pan.x, top: pan.y,
-                        transform: `scale(${scale})`, transformOrigin: '0 0',
-                        // width/height don't matter as much now that boundary handles visual, 
-                        // but used for "Relative" calculations if needed?
-                        // We can remove the visual box styles now
-                        width: 0, height: 0
-                    }}
-                >
-                    {tables.map(table => {
-                        if (isRoomEditing) return null; // Hide tables while editing room
-                        const isSelected = selectedTableId === table.id;
-                        const wFt = table.width || DEFAULT_TABLE_W_FT;
-                        const hFt = table.height || DEFAULT_TABLE_H_FT;
-                        const isVertical = hFt > wFt;
+                    {/* Wall Measurements */}
+                    {isRoomEditing && boundary.map((p, i) => {
+                        const nextP = boundary[(i + 1) % boundary.length];
+                        const midX = (p.x + nextP.x) / 2;
+                        const midY = (p.y + nextP.y) / 2;
+                        const len = Math.sqrt(Math.pow(nextP.x - p.x, 2) + Math.pow(nextP.y - p.y, 2));
 
                         return (
-                            <div
-                                key={table.id}
-                                onMouseDown={(e) => handleTableDown(e, table)}
-                                onTouchStart={(e) => handleTableDown(e, table)}
-                                style={{
-                                    position: 'absolute',
-                                    left: table.x * PX_PER_FT,
-                                    top: table.y * PX_PER_FT,
-                                    width: wFt * PX_PER_FT,
-                                    height: hFt * PX_PER_FT,
-                                    backgroundColor: getStatusColor(table.status, isSelected),
-                                    border: `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`,
-                                    borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    color: 'white', fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
-                                    boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
-                                    zIndex: isSelected ? 100 : 1, userSelect: 'none'
-                                }}
+                            <text
+                                key={i}
+                                x={midX * PX_PER_FT}
+                                y={midY * PX_PER_FT}
+                                fill="white"
+                                fontSize={12 / scale}
+                                textAnchor="middle"
+                                dy={-5 / scale}
+                                style={{ pointerEvents: 'none', userSelect: 'none', textShadow: '0 0 2px black' }}
                             >
-                                <span style={{
-                                    pointerEvents: 'none',
-                                    position: 'absolute',
-                                    top: '50%',
-                                    left: '50%',
-                                    transform: isVertical
-                                        ? 'translate(-50%, -50%) rotate(-90deg)'
-                                        : 'translate(-50%, -50%)',
-                                    width: isVertical ? `${hFt * PX_PER_FT - 4}px` : `${wFt * PX_PER_FT - 4}px`,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    textAlign: 'center',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}>
-                                    {table.label}
-                                </span>
-                            </div>
+                                {Math.round(len * 10) / 10}ft
+                            </text>
                         );
                     })}
+
+                    {/* Vertex Handles (Only in Edit Mode) */}
+                    {isRoomEditing && boundary.map((p, i) => {
+                        const nextP = boundary[(i + 1) % boundary.length];
+                        const midX = (p.x + nextP.x) / 2;
+                        const midY = (p.y + nextP.y) / 2;
+
+                        return (
+                            <React.Fragment key={i}>
+                                {/* Real Vertex */}
+                                <circle
+                                    cx={p.x * PX_PER_FT}
+                                    cy={p.y * PX_PER_FT}
+                                    r={10 / scale} // Reduced size (was 20 - too huge)
+                                    fill="var(--primary)"
+                                    stroke="white"
+                                    strokeWidth={2 / scale}
+                                    onMouseDown={(e) => handleVertexDown(e, i)}
+                                    onTouchStart={(e) => handleVertexDown(e, i)}
+                                    onDoubleClick={(e) => { e.stopPropagation(); deleteVertex(i); }}
+                                    style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                                />
+
+                                {/* Ghost Handle (Add Vertex) */}
+                                <circle
+                                    cx={midX * PX_PER_FT}
+                                    cy={midY * PX_PER_FT}
+                                    r={6 / scale}
+                                    fill="rgba(255, 255, 255, 0.5)"
+                                    stroke="var(--primary)"
+                                    strokeWidth={1 / scale}
+                                    onClick={(e) => { e.stopPropagation(); insertVertex(i); }}
+                                    onTouchEnd={(e) => { e.stopPropagation(); insertVertex(i); }}
+                                    style={{ cursor: 'copy', pointerEvents: 'auto' }}
+                                >
+                                    <title>Add Corner</title>
+                                </circle>
+                            </React.Fragment>
+                        );
+                    })}
+                </g>
+            </svg>
+
+            {/* Legacy Object Layer (Tables) */}
+            <div
+                style={{
+                    position: 'absolute', left: pan.x, top: pan.y,
+                    transform: `scale(${scale})`, transformOrigin: '0 0',
+                    // width/height don't matter as much now that boundary handles visual, 
+                    // but used for "Relative" calculations if needed?
+                    // We can remove the visual box styles now
+                    width: 0, height: 0
+                }}
+            >
+                {tables.map(table => {
+                    if (isRoomEditing) return null; // Hide tables while editing room
+                    const isSelected = selectedTableId === table.id;
+                    const wFt = table.width || DEFAULT_TABLE_W_FT;
+                    const hFt = table.height || DEFAULT_TABLE_H_FT;
+                    const isVertical = hFt > wFt;
+
+                    return (
+                        <div
+                            key={table.id}
+                            onMouseDown={(e) => handleTableDown(e, table)}
+                            onTouchStart={(e) => handleTableDown(e, table)}
+                            style={{
+                                position: 'absolute',
+                                left: table.x * PX_PER_FT,
+                                top: table.y * PX_PER_FT,
+                                width: wFt * PX_PER_FT,
+                                height: hFt * PX_PER_FT,
+                                backgroundColor: getStatusColor(table.status, isSelected),
+                                border: `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`,
+                                borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: 'white', fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
+                                boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
+                                zIndex: isSelected ? 100 : 1, userSelect: 'none'
+                            }}
+                        >
+                            <span style={{
+                                pointerEvents: 'none',
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: isVertical
+                                    ? 'translate(-50%, -50%) rotate(-90deg)'
+                                    : 'translate(-50%, -50%)',
+                                width: isVertical ? `${hFt * PX_PER_FT - 4}px` : `${wFt * PX_PER_FT - 4}px`,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                textAlign: 'center',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                {table.label}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+
+        {/* Right Side Panel: Table Edit */}
+        {selectedTable && !isDraggingTable && !isPanning && !isZooming && (
+            <div
+                className="glass-panel mobile-edit-panel"
+                onTouchStart={(e) => e.stopPropagation()}
+                style={{
+                    position: 'absolute',
+                    top: '60px', bottom: '80px', right: '0',
+                    width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                    animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
+                    display: 'flex', flexDirection: 'column'
+                }}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px' }}>Edit Table</h3>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button variant="ghost" size="sm" onClick={rotateTable} title="Rotate (Swap Dimensions)"><RotateCcw size={18} /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedTableId(null)}><X size={18} /></Button>
+                    </div>
+                </div>
+
+                <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Input
+                        label="Label"
+                        value={selectedTable.label}
+                        onChange={(e) => updateSelectedTable({ label: e.target.value })}
+                    />
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <Input
+                            label="Width (ft)" type="number"
+                            value={selectedTable.width || DEFAULT_TABLE_W_FT}
+                            onChange={(e) => updateSelectedTable({ width: parseInt(e.target.value) || DEFAULT_TABLE_W_FT })}
+                        />
+                        <Input
+                            label="Height (ft)" type="number"
+                            value={selectedTable.height || DEFAULT_TABLE_H_FT}
+                            onChange={(e) => updateSelectedTable({ height: parseInt(e.target.value) || DEFAULT_TABLE_H_FT })}
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Status</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            {['available', 'booked', 'paid'].map(status => (
+                                <button
+                                    key={status}
+                                    onClick={() => updateSelectedTable({ status })}
+                                    style={{
+                                        padding: '6px 10px', fontSize: '12px', borderRadius: 'var(--radius-sm)',
+                                        border: selectedTable.status === status ? `1px solid var(--primary)` : '1px solid var(--glass-border)',
+                                        background: selectedTable.status === status ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
+                                        color: selectedTable.status === status ? 'var(--primary)' : 'var(--text-muted)',
+                                        textTransform: 'capitalize', flex: 1
+                                    }}
+                                >
+                                    {status}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: 'auto' }}>
+                        <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Vendor</label>
+                        <select
+                            value={selectedTable.vendorId || ''}
+                            onChange={(e) => updateSelectedTable({ vendorId: e.target.value })}
+                            style={{
+                                width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
+                                padding: '10px', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none'
+                            }}
+                        >
+                            <option value="">(None)</option>
+                            {vendors.map(v => (
+                                <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete Table</Button>
                 </div>
             </div>
+        )}
 
-            {/* Right Side Panel: Table Edit */}
-            {selectedTable && !isDraggingTable && !isPanning && !isZooming && (
-                <div
-                    className="glass-panel mobile-edit-panel"
-                    onTouchStart={(e) => e.stopPropagation()}
-                    style={{
-                        position: 'absolute',
-                        top: '60px', bottom: '80px', right: '0',
-                        width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
-                        animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
-                        display: 'flex', flexDirection: 'column'
-                    }}
-                >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                        <h3 style={{ fontSize: '16px' }}>Edit Table</h3>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <Button variant="ghost" size="sm" onClick={rotateTable} title="Rotate (Swap Dimensions)"><RotateCcw size={18} /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => setSelectedTableId(null)}><X size={18} /></Button>
-                        </div>
+        {/* Right Side Panel: Event Settings */}
+        {showEventSettings && !selectedTable && !isDraggingTable && (
+            <div
+                className="glass-panel mobile-edit-panel"
+                onTouchStart={(e) => e.stopPropagation()}
+                style={{
+                    position: 'absolute',
+                    top: '60px', bottom: '80px', right: '0',
+                    width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                    animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
+                    display: 'flex', flexDirection: 'column'
+                }}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px' }}>Event Settings</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setShowEventSettings(false)}><X size={18} /></Button>
+                </div>
+
+                <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Input
+                        label="Event Name"
+                        value={event.name}
+                        onChange={(e) => updateEventSettings({ name: e.target.value })}
+                    />
+
+                    <Input
+                        label="Date"
+                        type="date"
+                        value={event.date}
+                        onChange={(e) => updateEventSettings({ date: e.target.value })}
+                    />
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <Input
+                            label="Venue Width (ft)" type="number"
+                            value={event.settings.width}
+                            onChange={(e) => updateEventSettings({ width: parseInt(e.target.value) || 1 })}
+                        />
+                        <Input
+                            label="Venue Height (ft)" type="number"
+                            value={event.settings.height}
+                            onChange={(e) => updateEventSettings({ height: parseInt(e.target.value) || 1 })}
+                        />
                     </div>
 
-                    <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <Input
-                            label="Label"
-                            value={selectedTable.label}
-                            onChange={(e) => updateSelectedTable({ label: e.target.value })}
-                        />
-
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            <Input
-                                label="Width (ft)" type="number"
-                                value={selectedTable.width || DEFAULT_TABLE_W_FT}
-                                onChange={(e) => updateSelectedTable({ width: parseInt(e.target.value) || DEFAULT_TABLE_W_FT })}
-                            />
-                            <Input
-                                label="Height (ft)" type="number"
-                                value={selectedTable.height || DEFAULT_TABLE_H_FT}
-                                onChange={(e) => updateSelectedTable({ height: parseInt(e.target.value) || DEFAULT_TABLE_H_FT })}
-                            />
-                        </div>
-
-                        <div>
-                            <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Status</label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                {['available', 'booked', 'paid'].map(status => (
-                                    <button
-                                        key={status}
-                                        onClick={() => updateSelectedTable({ status })}
-                                        style={{
-                                            padding: '6px 10px', fontSize: '12px', borderRadius: 'var(--radius-sm)',
-                                            border: selectedTable.status === status ? `1px solid var(--primary)` : '1px solid var(--glass-border)',
-                                            background: selectedTable.status === status ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-                                            color: selectedTable.status === status ? 'var(--primary)' : 'var(--text-muted)',
-                                            textTransform: 'capitalize', flex: 1
-                                        }}
-                                    >
-                                        {status}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div style={{ marginBottom: 'auto' }}>
-                            <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Vendor</label>
-                            <select
-                                value={selectedTable.vendorId || ''}
-                                onChange={(e) => updateSelectedTable({ vendorId: e.target.value })}
-                                style={{
-                                    width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
-                                    padding: '10px', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none'
-                                }}
-                            >
-                                <option value="">(None)</option>
-                                {vendors.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete Table</Button>
+                    <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)' }}>
+                        <Button variant="danger" onClick={deleteEvent} icon={Trash2}>Delete Event</Button>
                     </div>
                 </div>
-            )}
+            </div>
+        )}
 
-            {/* Right Side Panel: Event Settings */}
-            {showEventSettings && !selectedTable && !isDraggingTable && (
-                <div
-                    className="glass-panel mobile-edit-panel"
-                    onTouchStart={(e) => e.stopPropagation()}
-                    style={{
-                        position: 'absolute',
-                        top: '60px', bottom: '80px', right: '0',
-                        width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
-                        animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
-                        display: 'flex', flexDirection: 'column'
-                    }}
-                >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                        <h3 style={{ fontSize: '16px' }}>Event Settings</h3>
-                        <Button variant="ghost" size="sm" onClick={() => setShowEventSettings(false)}><X size={18} /></Button>
-                    </div>
-
-                    <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <Input
-                            label="Event Name"
-                            value={event.name}
-                            onChange={(e) => updateEventSettings({ name: e.target.value })}
-                        />
-
-                        <Input
-                            label="Date"
-                            type="date"
-                            value={event.date}
-                            onChange={(e) => updateEventSettings({ date: e.target.value })}
-                        />
-
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            <Input
-                                label="Venue Width (ft)" type="number"
-                                value={event.settings.width}
-                                onChange={(e) => updateEventSettings({ width: parseInt(e.target.value) || 1 })}
-                            />
-                            <Input
-                                label="Venue Height (ft)" type="number"
-                                value={event.settings.height}
-                                onChange={(e) => updateEventSettings({ height: parseInt(e.target.value) || 1 })}
-                            />
-                        </div>
-
-                        <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)' }}>
-                            <Button variant="danger" onClick={deleteEvent} icon={Trash2}>Delete Event</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <style>{`
+        <style>{`
                 @keyframes slideLeft {
                     from { transform: translateX(100%); }
                     to { transform: translateX(0); }
@@ -961,8 +968,8 @@ const FloorPlanPage = () => {
                     to { transform: translateY(0); }
                 }
             `}</style>
-        </div>
-    );
+    </div>
+);
 };
 
 export default FloorPlanPage;
