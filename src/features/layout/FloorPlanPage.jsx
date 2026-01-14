@@ -55,6 +55,7 @@ const FloorPlanPage = () => {
     const [isZooming, setIsZooming] = useState(false); // For Pinch Zoom
     const [isRoomEditing, setIsRoomEditing] = useState(false); // New Edit Mode
     const [draggingVertexIndex, setDraggingVertexIndex] = useState(null); // Track which vertex is moving
+    const [snapLines, setSnapLines] = useState([]); // Array of lines to draw {x1,y1,x2,y2}
 
     // State Mirrors for Event Handlers (Prevents Stale Closures during rapid events)
     const scaleRef = useRef(1);
@@ -378,8 +379,55 @@ const FloorPlanPage = () => {
         const deltaPxY = clientY - dragStart.current.y;
 
         if (Math.abs(deltaPxX) > 2 || Math.abs(deltaPxY) > 2) hasMoved.current = true;
+        if (Math.abs(deltaPxX) > 2 || Math.abs(deltaPxY) > 2) hasMoved.current = true;
 
-        if (isDraggingTable && selectedTableId) {
+        if (draggingVertexIndex !== null) {
+            e.preventDefault();
+            const deltaFtX = (deltaPxX / scale) / PX_PER_FT;
+            const deltaFtY = (deltaPxY / scale) / PX_PER_FT;
+
+            let newX = initialObjPos.current.x + deltaFtX;
+            let newY = initialObjPos.current.y + deltaFtY;
+
+            // --- SNAP LOGIC ---
+            let activeSnapLines = [];
+            const SNAP_THRESHOLD = 0.5; // Feet
+
+            // Find neighbors
+            const prevIndex = (draggingVertexIndex - 1 + boundary.length) % boundary.length;
+            const nextIndex = (draggingVertexIndex + 1) % boundary.length;
+            const pPrev = boundary[prevIndex];
+            const pNext = boundary[nextIndex];
+
+            // Snap X
+            if (Math.abs(newX - pPrev.x) < SNAP_THRESHOLD) {
+                newX = pPrev.x; // Snap to prev X
+                activeSnapLines.push({ x1: newX, y1: newY, x2: pPrev.x, y2: pPrev.y });
+            } else if (Math.abs(newX - pNext.x) < SNAP_THRESHOLD) {
+                newX = pNext.x; // Snap to next X
+                activeSnapLines.push({ x1: newX, y1: newY, x2: pNext.x, y2: pNext.y });
+            } else {
+                newX = Math.round(newX * 10) / 10; // Default: Snap to 0.1ft
+            }
+
+            // Snap Y
+            if (Math.abs(newY - pPrev.y) < SNAP_THRESHOLD) {
+                newY = pPrev.y;
+                activeSnapLines.push({ x1: newX, y1: newY, x2: pPrev.x, y2: pPrev.y });
+            } else if (Math.abs(newY - pNext.y) < SNAP_THRESHOLD) {
+                newY = pNext.y;
+                activeSnapLines.push({ x1: newX, y1: newY, x2: pNext.x, y2: pNext.y });
+            } else {
+                newY = Math.round(newY * 10) / 10;
+            }
+
+            setSnapLines(activeSnapLines);
+
+            const newBoundary = [...boundary];
+            newBoundary[draggingVertexIndex] = { x: newX, y: newY };
+            updateEventSettings({ boundary: newBoundary });
+            return; // Done
+        } else if (isDraggingTable && selectedTableId) {
             e.preventDefault(); // Stop scroll when dragging table
             const t = tables.find(t => t.id === selectedTableId);
             const w = t.width || DEFAULT_TABLE_W_FT;
@@ -399,21 +447,6 @@ const FloorPlanPage = () => {
             newY = Math.max(0, Math.min(newY, roomHeightFt - h));
 
             updateSelectedTable({ x: newX, y: newY });
-        } else if (draggingVertexIndex !== null) {
-            e.preventDefault();
-            const deltaFtX = (deltaPxX / scale) / PX_PER_FT;
-            const deltaFtY = (deltaPxY / scale) / PX_PER_FT;
-
-            let newX = initialObjPos.current.x + deltaFtX;
-            let newY = initialObjPos.current.y + deltaFtY;
-
-            newX = Math.round(newX); // Snap to grid
-            newY = Math.round(newY);
-
-            const newBoundary = [...boundary];
-            newBoundary[draggingVertexIndex] = { x: newX, y: newY };
-            updateEventSettings({ boundary: newBoundary });
-
         } else if (isPanning) {
             setPan({
                 x: initialObjPos.current.x + deltaPxX,
@@ -427,6 +460,7 @@ const FloorPlanPage = () => {
         setIsPanning(false);
         setIsZooming(false);
         setDraggingVertexIndex(null); // Stop vertex drag
+        setSnapLines([]); // Clear guides
         lastTouchDistance.current = null;
         if (isPanning && !hasMoved.current) {
             setSelectedTableId(null);
@@ -591,6 +625,41 @@ const FloorPlanPage = () => {
                             strokeLinejoin="round"
                             style={{ pointerEvents: 'visiblePainted' }}
                         />
+
+                        {/* Snap Guides */}
+                        {isRoomEditing && snapLines.map((line, i) => (
+                            <line
+                                key={i}
+                                x1={line.x1 * PX_PER_FT} y1={line.y1 * PX_PER_FT}
+                                x2={line.x2 * PX_PER_FT} y2={line.y2 * PX_PER_FT}
+                                stroke="var(--primary)"
+                                strokeWidth={1 / scale}
+                                strokeDasharray={`${4 / scale}, ${4 / scale}`}
+                            />
+                        ))}
+
+                        {/* Wall Measurements */}
+                        {isRoomEditing && boundary.map((p, i) => {
+                            const nextP = boundary[(i + 1) % boundary.length];
+                            const midX = (p.x + nextP.x) / 2;
+                            const midY = (p.y + nextP.y) / 2;
+                            const len = Math.sqrt(Math.pow(nextP.x - p.x, 2) + Math.pow(nextP.y - p.y, 2));
+
+                            return (
+                                <text
+                                    key={i}
+                                    x={midX * PX_PER_FT}
+                                    y={midY * PX_PER_FT}
+                                    fill="white"
+                                    fontSize={12 / scale}
+                                    textAnchor="middle"
+                                    dy={-5 / scale}
+                                    style={{ pointerEvents: 'none', userSelect: 'none', textShadow: '0 0 2px black' }}
+                                >
+                                    {Math.round(len * 10) / 10}ft
+                                </text>
+                            );
+                        })}
 
                         {/* Vertex Handles (Only in Edit Mode) */}
                         {isRoomEditing && boundary.map((p, i) => {
