@@ -560,20 +560,44 @@ const FloorPlanPage = () => {
                     />
 
                     {/* Vertex Handles (Only in Edit Mode) */}
-                    {isRoomEditing && boundary.map((p, i) => (
-                        <circle
-                            key={i}
-                            cx={p.x * PX_PER_FT}
-                            cy={p.y * PX_PER_FT}
-                            r={20 / scale} // Fixed visual size handle
-                            fill="var(--primary)"
-                            stroke="white"
-                            strokeWidth={2 / scale}
-                            onMouseDown={(e) => handleVertexDown(e, i)}
-                            onTouchStart={(e) => handleVertexDown(e, i)}
-                            style={{ cursor: 'pointer', touchAction: 'none' }}
-                        />
-                    ))}
+                    {isRoomEditing && boundary.map((p, i) => {
+                        const nextP = boundary[(i + 1) % boundary.length];
+                        const midX = (p.x + nextP.x) / 2;
+                        const midY = (p.y + nextP.y) / 2;
+
+                        return (
+                            <React.Fragment key={i}>
+                                {/* Real Vertex */}
+                                <circle
+                                    cx={p.x * PX_PER_FT}
+                                    cy={p.y * PX_PER_FT}
+                                    r={20 / scale}
+                                    fill="var(--primary)"
+                                    stroke="white"
+                                    strokeWidth={2 / scale}
+                                    onMouseDown={(e) => handleVertexDown(e, i)}
+                                    onTouchStart={(e) => handleVertexDown(e, i)}
+                                    onDoubleClick={(e) => { e.stopPropagation(); deleteVertex(i); }}
+                                    style={{ cursor: 'pointer', touchAction: 'none' }}
+                                />
+
+                                {/* Ghost Handle (Add Vertex) */}
+                                <circle
+                                    cx={midX * PX_PER_FT}
+                                    cy={midY * PX_PER_FT}
+                                    r={14 / scale}
+                                    fill="rgba(255, 255, 255, 0.5)"
+                                    stroke="var(--primary)"
+                                    strokeWidth={1 / scale}
+                                    onClick={(e) => { e.stopPropagation(); insertVertex(i); }}
+                                    onTouchEnd={(e) => { e.stopPropagation(); insertVertex(i); }}
+                                    style={{ cursor: 'copy', touchAction: 'none' }}
+                                >
+                                    <title>Add Corner</title>
+                                </circle>
+                            </React.Fragment>
+                        );
+                    })}
                 </svg>
 
                 {/* Legacy Object Layer (Tables) */}
