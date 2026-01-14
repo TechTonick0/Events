@@ -5,6 +5,7 @@ import useLocalStorage from '../../hooks/useLocalStorage';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { v4 as uuidv4 } from 'uuid';
 
 // UNIT CONVERSION
@@ -227,13 +228,19 @@ const FloorPlanPage = () => {
         const centerFtX = viewportCenterCanvasPxX / PX_PER_FT;
         const centerFtY = viewportCenterCanvasPxY / PX_PER_FT;
 
+        // Auto-Name: Find max "T-X" and increment
+        const usedNumbers = tables
+            .map(t => {
+                const match = t.label.match(/^T-(\d+)$/);
+                return match ? parseInt(match[1]) : 0;
+            });
+        const nextNum = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1;
+
         const newTable = {
             id: uuidv4(),
-            label: `T-${tables.length + 1}`,
+            label: `T-${nextNum}`,
             x: Math.max(0, Math.min(roomWidthFt - DEFAULT_TABLE_W_FT, centerFtX - DEFAULT_TABLE_W_FT / 2)),
             y: Math.max(0, Math.min(roomHeightFt - DEFAULT_TABLE_H_FT, centerFtY - DEFAULT_TABLE_H_FT / 2)),
-            width: DEFAULT_TABLE_W_FT,
-            height: DEFAULT_TABLE_H_FT,
             status: 'available',
             vendorId: ''
         };
@@ -506,7 +513,10 @@ const FloorPlanPage = () => {
             // If we were dragging a table, but we didn't actually move it > 2px, treat as a CLICK.
             if (!hasMoved.current && draggingTableIdRef.current) {
                 setSelectedTableId(draggingTableIdRef.current); // Select it now
-                setShowEventSettings(true); // Open menu on clean click
+                // Close other menus to prevent overlap
+                setIsZoneEditing(false);
+                setIsRoomEditing(false);
+                setShowEventSettings(false);
             }
             // If moved, we do nothing. The drag is done. 
             // selectedTableId remains whatever it was (or null).
@@ -648,17 +658,48 @@ const FloorPlanPage = () => {
                     </div>
 
                     {/* Integrated Zone & Export Controls */}
-                    <Button variant={isZoneEditing ? 'primary' : 'ghost'} size="sm" onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} title="Edit Zones">
+                    <Button variant={isZoneEditing ? 'primary' : 'ghost'} size="sm" onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); setShowEventSettings(false); setSelectedTableId(null); }} title="Edit Zones">
                         <Layers size={18} />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={handleExport} title="Export Layout">
-                        <Download size={18} />
-                    </Button>
+                    {/* Export Menu */}
+                    <div style={{ position: 'relative' }}>
+                        <Button
+                            variant={exportMenuOpen ? 'primary' : 'ghost'}
+                            size="sm"
+                            onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                            title="Export Options"
+                        >
+                            <Download size={18} />
+                        </Button>
+                        {exportMenuOpen && (
+                            <div className="glass-panel" style={{
+                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                width: '220px', padding: '8px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '4px'
+                            }}>
+                                <button className="menu-item" onClick={() => handleAdvancedExport('public')}>
+                                    Full Map (PDF)
+                                </button>
+                                <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '4px 0' }} />
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '4px 8px' }}>VENDOR PACKETS</div>
+                                {vendors.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No vendors added</div>}
+                                {vendors.map(v => (
+                                    <button
+                                        key={v.id}
+                                        className="menu-item"
+                                        onClick={() => handleAdvancedExport('tenant', v.id)}
+                                        style={{ fontSize: '12px', padding: '6px 8px' }}
+                                    >
+                                        {v.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     <Button
                         variant={isRoomEditing ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); }}
+                        onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); setIsZoneEditing(false); }}
                         title="Edit Room Shape"
                     >
                         <Grid size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
@@ -666,7 +707,7 @@ const FloorPlanPage = () => {
                     <Button
                         variant={showEventSettings ? 'primary' : 'ghost'}
                         size="sm"
-                        onClick={() => { setShowEventSettings(!showEventSettings); setSelectedTableId(null); }}
+                        onClick={() => { setShowEventSettings(!showEventSettings); setSelectedTableId(null); setIsRoomEditing(false); setIsZoneEditing(false); }}
                     >
                         <Settings size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Settings</span>
                     </Button>
