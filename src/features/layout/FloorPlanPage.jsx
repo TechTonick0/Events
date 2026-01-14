@@ -190,6 +190,12 @@ const FloorPlanPage = () => {
                 await new Promise(r => setTimeout(r, 100)); // Render Wait
             }
 
+            // Auto-Fit View for Capture
+            const originalScale = scaleRef.current;
+            const originalPan = panRef.current;
+            fitToScreen();
+            await new Promise(r => setTimeout(r, 200)); // Wait for zoom/pan
+
             // Print Mode (Light Background)
             if (containerRef.current) {
                 containerRef.current.classList.add('print-map');
@@ -204,33 +210,62 @@ const FloorPlanPage = () => {
                 logging: false
             });
 
-            // Revert styles
+            // Revert styles & view
             if (containerRef.current) containerRef.current.classList.remove('print-map');
+            setScale(originalScale);
+            setPan(originalPan);
 
             // Revert State if Tenant View
             if (type === 'tenant') {
                 updateEventTables(originalTables);
             }
 
-            // 2. Generate PDF
+            // 2. Generate PDF (Letter Landscape)
             const pdf = new jsPDF({
                 orientation: 'landscape',
-                unit: 'px',
-                format: [canvas.width, canvas.height]
+                unit: 'pt',
+                format: 'letter'
             });
 
-            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+            const docWidth = pdf.internal.pageSize.getWidth();
+            const docHeight = pdf.internal.pageSize.getHeight();
+            const margin = 30;
 
-            // Add Banner Info
+            // Header Space
+            const headerHeight = 60;
+            const contentWidth = docWidth - (margin * 2);
+            const contentHeight = docHeight - (margin * 2) - headerHeight;
+
+            const imgProps = pdf.getImageProperties(canvas.toDataURL('image/png'));
+            const imgRatio = imgProps.width / imgProps.height;
+            const pageRatio = contentWidth / contentHeight;
+
+            let finalW = contentWidth;
+            let finalH = contentWidth / imgRatio;
+
+            if (finalH > contentHeight) {
+                finalH = contentHeight;
+                finalW = contentHeight * imgRatio;
+            }
+
+            // Center Image
+            const x = (docWidth - finalW) / 2;
+            const y = headerHeight + margin; // Below header
+
+            pdf.addImage(imgProps.data, 'PNG', x, y, finalW, finalH);
+
+            // Add Banner Info (Scaled)
             pdf.setFontSize(24);
-            pdf.setTextColor(0, 0, 0); // Black Text for Print
-            pdf.text(event.name, 40, 40);
-            pdf.setFontSize(16);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(event.name, margin, margin + 20);
+
+            pdf.setFontSize(14);
+            pdf.setTextColor(80, 80, 80);
             if (type === 'tenant') {
                 const vName = vendors.find(v => v.id === vendorId)?.name;
-                pdf.text(`Vendor Map for: ${vName}`, 40, 65);
+                pdf.text(`Vendor Map: ${vName}`, margin, margin + 45);
             } else {
-                pdf.text('Floor Plan', 40, 65);
+                pdf.text('Overall Floor Plan', margin, margin + 45);
             }
 
             pdf.save(`${event.name}_FloorPlan_${type}.pdf`);
