@@ -61,7 +61,6 @@ const FloorPlanPage = () => {
     const scaleRef = useRef(1);
     const panRef = useRef({ x: 0, y: 0 });
     const isDraggingTableRef = useRef(false); // Validates drag state synchronously
-    const isDraggingTableRef = useRef(false); // Validates drag state synchronously
     const draggingTableIdRef = useRef(null); // Track WHICH table is dragging synchronously
 
     // Sync Refs with State
