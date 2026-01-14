@@ -572,66 +572,66 @@ const FloorPlanPage = () => {
                 onMouseLeave={handleUp}
             >
                 {/* SVG Layer for Room Boundary */}
+                {/* SVG Layer for Room Boundary */}
                 <svg
                     style={{
                         position: 'absolute', left: 0, top: 0,
-                        transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-                        transformOrigin: '0 0',
-                        // Make sure SVG covers the whole theoretical space (or large enough). 
-                        // Since our coordinate system is dynamic, we'll let overflow visible handle it?
-                        // Better: Set it to a huge size or match container but with viewbox? 
-                        // Simplest: 0x0 size with overflow visible
-                        width: 0, height: 0, overflow: 'visible'
+                        width: '100%', height: '100%',
+                        pointerEvents: 'none', // Let clicks pass through empty areas
+                        zIndex: 10
                     }}
                 >
-                    {/* Room Floor (Polygon) */}
-                    <polygon
-                        points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
-                        fill="rgba(255, 255, 255, 0.03)"
-                        stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
-                        strokeWidth={isRoomEditing ? 4 / scale : 2 / scale} // Stays thin visually or thick if editing
-                        strokeLinejoin="round"
-                    />
+                    <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
+                        {/* Room Floor (Polygon) */}
+                        <polygon
+                            points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
+                            fill="rgba(255, 255, 255, 0.03)"
+                            stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
+                            strokeWidth={isRoomEditing ? 4 / scale : 2 / scale}
+                            strokeLinejoin="round"
+                            style={{ pointerEvents: 'visiblePainted' }}
+                        />
 
-                    {/* Vertex Handles (Only in Edit Mode) */}
-                    {isRoomEditing && boundary.map((p, i) => {
-                        const nextP = boundary[(i + 1) % boundary.length];
-                        const midX = (p.x + nextP.x) / 2;
-                        const midY = (p.y + nextP.y) / 2;
+                        {/* Vertex Handles (Only in Edit Mode) */}
+                        {isRoomEditing && boundary.map((p, i) => {
+                            const nextP = boundary[(i + 1) % boundary.length];
+                            const midX = (p.x + nextP.x) / 2;
+                            const midY = (p.y + nextP.y) / 2;
 
-                        return (
-                            <React.Fragment key={i}>
-                                {/* Real Vertex */}
-                                <circle
-                                    cx={p.x * PX_PER_FT}
-                                    cy={p.y * PX_PER_FT}
-                                    r={20 / scale}
-                                    fill="var(--primary)"
-                                    stroke="white"
-                                    strokeWidth={2 / scale}
-                                    onMouseDown={(e) => handleVertexDown(e, i)}
-                                    onTouchStart={(e) => handleVertexDown(e, i)}
-                                    onDoubleClick={(e) => { e.stopPropagation(); deleteVertex(i); }}
-                                    style={{ cursor: 'pointer', touchAction: 'none' }}
-                                />
+                            return (
+                                <React.Fragment key={i}>
+                                    {/* Real Vertex */}
+                                    <circle
+                                        cx={p.x * PX_PER_FT}
+                                        cy={p.y * PX_PER_FT}
+                                        r={10 / scale} // Reduced size (was 20 - too huge)
+                                        fill="var(--primary)"
+                                        stroke="white"
+                                        strokeWidth={2 / scale}
+                                        onMouseDown={(e) => handleVertexDown(e, i)}
+                                        onTouchStart={(e) => handleVertexDown(e, i)}
+                                        onDoubleClick={(e) => { e.stopPropagation(); deleteVertex(i); }}
+                                        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                                    />
 
-                                {/* Ghost Handle (Add Vertex) */}
-                                <circle
-                                    cx={midX * PX_PER_FT}
-                                    cy={midY * PX_PER_FT}
-                                    r={14 / scale}
-                                    fill="rgba(255, 255, 255, 0.5)"
-                                    stroke="var(--primary)"
-                                    strokeWidth={1 / scale}
-                                    onClick={(e) => { e.stopPropagation(); insertVertex(i); }}
-                                    onTouchEnd={(e) => { e.stopPropagation(); insertVertex(i); }}
-                                    style={{ cursor: 'copy', touchAction: 'none' }}
-                                >
-                                    <title>Add Corner</title>
-                                </circle>
-                            </React.Fragment>
-                        );
-                    })}
+                                    {/* Ghost Handle (Add Vertex) */}
+                                    <circle
+                                        cx={midX * PX_PER_FT}
+                                        cy={midY * PX_PER_FT}
+                                        r={6 / scale}
+                                        fill="rgba(255, 255, 255, 0.5)"
+                                        stroke="var(--primary)"
+                                        strokeWidth={1 / scale}
+                                        onClick={(e) => { e.stopPropagation(); insertVertex(i); }}
+                                        onTouchEnd={(e) => { e.stopPropagation(); insertVertex(i); }}
+                                        style={{ cursor: 'copy', pointerEvents: 'auto' }}
+                                    >
+                                        <title>Add Corner</title>
+                                    </circle>
+                                </React.Fragment>
+                            );
+                        })}
+                    </g>
                 </svg>
 
                 {/* Legacy Object Layer (Tables) */}
