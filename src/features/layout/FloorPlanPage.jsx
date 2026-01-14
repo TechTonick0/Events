@@ -534,6 +534,8 @@ const FloorPlanPage = () => {
                 }}
                 onMouseDown={handleCanvasDown}
                 onMouseMove={handleMove}
+                onMouseUp={handleUp}
+                onMouseLeave={handleUp}
             >
                 {/* SVG Layer for Room Boundary */}
                 <svg
