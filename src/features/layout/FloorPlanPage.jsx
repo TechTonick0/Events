@@ -159,24 +159,7 @@ const FloorPlanPage = () => {
         }
     };
 
-    const handleExport = async () => {
-        if (!containerRef.current) return;
-        setIsRoomEditing(false);
-        setIsZoneEditing(false);
-        setSelectedTableId(null);
 
-        // Wait for render
-        setTimeout(async () => {
-            const canvas = await html2canvas(containerRef.current, {
-                useCORS: true,
-                scale: 2 // High Resolution
-            });
-            const link = document.createElement('a');
-            link.download = `${event.name}-Layout.png`;
-            link.href = canvas.toDataURL();
-            link.click();
-        }, 100);
-    };
 
     // --- Vertex Interaction ---
     const handleVertexDown = (e, index) => {
@@ -1092,45 +1075,23 @@ const FloorPlanPage = () => {
                 )
             }
 
-    const handleExport = async () => {
-        if (!containerRef.current) return;
-            try {
-            const canvas = await html2canvas(containerRef.current, {
-                backgroundColor: '#1a1a1a', // Match theme
-            scale: 2 // High res
-            });
-            const link = document.createElement('a');
-            link.download = `${event.name || 'Layout'}_FloorPlan.png`;
-            link.href = canvas.toDataURL();
-            link.click();
-        } catch (err) {
-                console.error("Export failed:", err);
-            alert("Could not export layout.");
-        }
-    };
 
-            return (
-            <div className="page-container" style={{
-                height: 'calc(100vh - 60px)', position: 'relative', overflow: 'hidden',
-                touchAction: 'none' // Prevent pull-to-refresh
+
+            {/* Bottom Toolbar */}
+            <div style={{
+                position: 'fixed', bottom: 0, left: 0, right: 0,
+                height: '60px', background: 'var(--glass-bg)', borderTop: '1px solid var(--glass-border)',
+                backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+                zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)'
             }}>
-                {/* ... other render content ... */}
+                <Button variant={isRoomEditing ? 'primary' : 'ghost'} onClick={() => { setIsRoomEditing(!isRoomEditing); setIsZoneEditing(false); }} icon={Grid} title="Edit Room Shape" />
+                <Button variant={isZoneEditing ? 'primary' : 'ghost'} onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} icon={Layers} title="Edit Zones" />
+                <Button variant="ghost" onClick={addTable} icon={Plus} title="Add Table" />
+                <Button variant="ghost" onClick={fitToScreen} icon={Maximize} title="Fit to Screen" />
+                <Button variant="ghost" onClick={handleExport} icon={Download} title="Export Layout" />
+            </div>
 
-                {/* Bottom Toolbar */}
-                <div style={{
-                    position: 'fixed', bottom: 0, left: 0, right: 0,
-                    height: '60px', background: 'var(--glass-bg)', borderTop: '1px solid var(--glass-border)',
-                    backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-                    zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)'
-                }}>
-                    <Button variant={isRoomEditing ? 'primary' : 'ghost'} onClick={() => { setIsRoomEditing(!isRoomEditing); setIsZoneEditing(false); }} icon={Grid} title="Edit Room Shape" />
-                    <Button variant={isZoneEditing ? 'primary' : 'ghost'} onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} icon={Layers} title="Edit Zones" />
-                    <Button variant="ghost" onClick={addTable} icon={Plus} title="Add Table" />
-                    <Button variant="ghost" onClick={fitToScreen} icon={Maximize} title="Fit to Screen" />
-                    <Button variant="ghost" onClick={handleExport} icon={Download} title="Export Layout" />
-                </div>
-
-                <style>{`
+            <style>{`
                 @keyframes slideLeft {
                     from { transform: translateX(100%); }
                     to { transform: translateX(0); }
@@ -1174,8 +1135,8 @@ const FloorPlanPage = () => {
                     to { transform: translateY(0); }
                 }
             `}</style>
-            </div >
-            );
+        </div >
+    );
 };
 
-            export default FloorPlanPage;
+export default FloorPlanPage;
