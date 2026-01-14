@@ -60,8 +60,7 @@ const FloorPlanPage = () => {
     // State Mirrors for Event Handlers (Prevents Stale Closures during rapid events)
     const scaleRef = useRef(1);
     const panRef = useRef({ x: 0, y: 0 });
-    const scaleRef = useRef(1);
-    const panRef = useRef({ x: 0, y: 0 });
+    const isDraggingTableRef = useRef(false); // Validates drag state synchronously
     const isDraggingTableRef = useRef(false); // Validates drag state synchronously
     const draggingTableIdRef = useRef(null); // Track WHICH table is dragging synchronously
 
@@ -167,7 +166,7 @@ const FloorPlanPage = () => {
 
     const getSelectedTable = () => tables.find(t => t.id === selectedTableId);
 
-    const getSelectedTable = () => tables.find(t => t.id === selectedTableId);
+
 
     const updateTable = (id, updates) => {
         const newTables = tables.map(t => {
