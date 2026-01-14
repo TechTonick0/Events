@@ -91,7 +91,7 @@ const EventHeader = () => {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <div className="app-shell">
         <Routes>
           <Route path="/" element={<EventsPage />} />
