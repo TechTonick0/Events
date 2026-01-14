@@ -60,7 +60,10 @@ const FloorPlanPage = () => {
     // State Mirrors for Event Handlers (Prevents Stale Closures during rapid events)
     const scaleRef = useRef(1);
     const panRef = useRef({ x: 0, y: 0 });
+    const scaleRef = useRef(1);
+    const panRef = useRef({ x: 0, y: 0 });
     const isDraggingTableRef = useRef(false); // Validates drag state synchronously
+    const draggingTableIdRef = useRef(null); // Track WHICH table is dragging synchronously
 
     // Sync Refs with State
     useEffect(() => {
@@ -164,9 +167,11 @@ const FloorPlanPage = () => {
 
     const getSelectedTable = () => tables.find(t => t.id === selectedTableId);
 
-    const updateSelectedTable = (updates) => {
+    const getSelectedTable = () => tables.find(t => t.id === selectedTableId);
+
+    const updateTable = (id, updates) => {
         const newTables = tables.map(t => {
-            if (t.id === selectedTableId) {
+            if (t.id === id) {
                 let newLabel = updates.label !== undefined ? updates.label : t.label;
                 if (updates.vendorId) {
                     const vendor = vendors.find(v => v.id === updates.vendorId);
@@ -177,6 +182,11 @@ const FloorPlanPage = () => {
             return t;
         });
         updateEventTables(newTables);
+    };
+
+    const updateSelectedTable = (updates) => {
+        if (!selectedTableId) return;
+        updateTable(selectedTableId, updates);
     };
 
     const addTable = () => {
@@ -294,10 +304,12 @@ const FloorPlanPage = () => {
 
         setIsDraggingTable(true);
         isDraggingTableRef.current = true; // Sync update
-        // Don't select immediately. Wait for Up to determine click vs drag.
-        // However, we MUST track which table is potentially being dragged.
-        setSelectedTableId(table.id);
-        setShowEventSettings(false); // Close settings panel on start
+
+        // Track Drag Target separate from Selection
+        // Don't set selectedTableId here.
+        draggingTableIdRef.current = table.id;
+
+        setShowEventSettings(false); // Close settings panel on start (optional preference)
 
         hasMoved.current = false;
         dragStart.current = { x: clientX, y: clientY };
@@ -433,9 +445,9 @@ const FloorPlanPage = () => {
             newBoundary[draggingVertexIndex] = { x: newX, y: newY };
             updateEventSettings({ boundary: newBoundary });
             return; // Done
-        } else if (isDraggingTableRef.current && selectedTableId) {
+        } else if (isDraggingTableRef.current && draggingTableIdRef.current) {
             e.preventDefault(); // Stop scroll when dragging table
-            const t = tables.find(t => t.id === selectedTableId);
+            const t = tables.find(t => t.id === draggingTableIdRef.current);
             const w = t.width || DEFAULT_TABLE_W_FT;
             const h = t.height || DEFAULT_TABLE_H_FT;
 
@@ -452,7 +464,7 @@ const FloorPlanPage = () => {
             newX = Math.max(0, Math.min(newX, roomWidthFt - w));
             newY = Math.max(0, Math.min(newY, roomHeightFt - h));
 
-            updateSelectedTable({ x: newX, y: newY });
+            updateTable(t.id, { x: newX, y: newY });
         } else if (isPanning) {
             setPan({
                 x: initialObjPos.current.x + deltaPxX,
@@ -464,18 +476,17 @@ const FloorPlanPage = () => {
     const handleUp = () => {
         if (isDraggingTable) {
             // If we were dragging a table, but we didn't actually move it > 2px, treat as a CLICK.
-            if (!hasMoved.current) {
+            if (!hasMoved.current && draggingTableIdRef.current) {
+                setSelectedTableId(draggingTableIdRef.current); // Select it now
                 setShowEventSettings(true); // Open menu on clean click
-            } else {
-                // If we DID move, keep it selected but DON'T open menu (or close it if logic dictates)
-                // User request: "popup after drop it... shouldn't do that".
-                // So if moved, we ensure settings is FALSE?
-                setShowEventSettings(false);
             }
+            // If moved, we do nothing. The drag is done. 
+            // selectedTableId remains whatever it was (or null).
         }
 
         setIsDraggingTable(false);
         isDraggingTableRef.current = false;
+        draggingTableIdRef.current = null;
         setIsPanning(false);
         setIsZooming(false);
         setDraggingVertexIndex(null); // Stop vertex drag
