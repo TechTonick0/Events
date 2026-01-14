@@ -292,8 +292,11 @@ const FloorPlanPage = () => {
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
         setIsDraggingTable(true);
+        // Don't select immediately. Wait for Up to determine click vs drag.
+        // However, we MUST track which table is potentially being dragged.
         setSelectedTableId(table.id);
-        setShowEventSettings(false);
+        setShowEventSettings(false); // Close settings panel on start
+
         hasMoved.current = false;
         dragStart.current = { x: clientX, y: clientY };
         initialObjPos.current = { x: table.x, y: table.y };
@@ -456,6 +459,18 @@ const FloorPlanPage = () => {
     };
 
     const handleUp = () => {
+        if (isDraggingTable) {
+            // If we were dragging a table, but we didn't actually move it > 2px, treat as a CLICK.
+            if (!hasMoved.current) {
+                setShowEventSettings(true); // Open menu on clean click
+            } else {
+                // If we DID move, keep it selected but DON'T open menu (or close it if logic dictates)
+                // User request: "popup after drop it... shouldn't do that".
+                // So if moved, we ensure settings is FALSE?
+                setShowEventSettings(false);
+            }
+        }
+
         setIsDraggingTable(false);
         setIsPanning(false);
         setIsZooming(false);
@@ -464,6 +479,7 @@ const FloorPlanPage = () => {
         lastTouchDistance.current = null;
         if (isPanning && !hasMoved.current) {
             setSelectedTableId(null);
+            setShowEventSettings(false);
         }
     };
 
