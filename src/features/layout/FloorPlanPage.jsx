@@ -30,6 +30,14 @@ const FloorPlanPage = () => {
     const roomWidthFt = event?.settings?.width || 100;
     const roomHeightFt = event?.settings?.height || 100;
 
+    // Boundary: Array of {x, y} in feet. Default to rectangle if missing.
+    const boundary = event?.settings?.boundary || [
+        { x: 0, y: 0 },
+        { x: roomWidthFt, y: 0 },
+        { x: roomWidthFt, y: roomHeightFt },
+        { x: 0, y: roomHeightFt }
+    ];
+
     // Converted to Pixels for CSS
     const canvasWidthPx = roomWidthFt * PX_PER_FT;
     const canvasHeightPx = roomHeightFt * PX_PER_FT;
@@ -45,6 +53,8 @@ const FloorPlanPage = () => {
     const [isPanning, setIsPanning] = useState(false);
 
     const [isZooming, setIsZooming] = useState(false); // For Pinch Zoom
+    const [isRoomEditing, setIsRoomEditing] = useState(false); // New Edit Mode
+    const [draggingVertexIndex, setDraggingVertexIndex] = useState(null); // Track which vertex is moving
 
     // State Mirrors for Event Handlers (Prevents Stale Closures during rapid events)
     const scaleRef = useRef(1);
@@ -350,10 +360,26 @@ const FloorPlanPage = () => {
             newX = Math.round(newX);
             newY = Math.round(newY);
 
+            // Bounding box check (simple rect check for now, upgrade to poly check later if needed)
             newX = Math.max(0, Math.min(newX, roomWidthFt - w));
             newY = Math.max(0, Math.min(newY, roomHeightFt - h));
 
             updateSelectedTable({ x: newX, y: newY });
+        } else if (draggingVertexIndex !== null) {
+            e.preventDefault();
+            const deltaFtX = (deltaPxX / scale) / PX_PER_FT;
+            const deltaFtY = (deltaPxY / scale) / PX_PER_FT;
+
+            let newX = initialObjPos.current.x + deltaFtX;
+            let newY = initialObjPos.current.y + deltaFtY;
+
+            newX = Math.round(newX); // Snap to grid
+            newY = Math.round(newY);
+
+            const newBoundary = [...boundary];
+            newBoundary[draggingVertexIndex] = { x: newX, y: newY };
+            updateEventSettings({ boundary: newBoundary });
+
         } else if (isPanning) {
             setPan({
                 x: initialObjPos.current.x + deltaPxX,
@@ -366,6 +392,7 @@ const FloorPlanPage = () => {
         setIsDraggingTable(false);
         setIsPanning(false);
         setIsZooming(false);
+        setDraggingVertexIndex(null); // Stop vertex drag
         lastTouchDistance.current = null;
         if (isPanning && !hasMoved.current) {
             setSelectedTableId(null);
@@ -475,6 +502,15 @@ const FloorPlanPage = () => {
                     <div className="hide-mobile" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                         {roomWidthFt}ft x {roomHeightFt}ft
                     </div>
+
+                    <Button
+                        variant={isRoomEditing ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); }}
+                        title="Edit Room Shape"
+                    >
+                        <Maximize size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
+                    </Button>
                     <Button
                         variant={showEventSettings ? 'primary' : 'ghost'}
                         size="sm"
@@ -498,20 +534,59 @@ const FloorPlanPage = () => {
                 }}
                 onMouseDown={handleCanvasDown}
                 onMouseMove={handleMove}
-                onMouseUp={handleUp} onMouseLeave={handleUp}
             >
-                {/* Venue Boundary (The "Room") */}
+                {/* SVG Layer for Room Boundary */}
+                <svg
+                    style={{
+                        position: 'absolute', left: 0, top: 0,
+                        transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                        transformOrigin: '0 0',
+                        // Make sure SVG covers the whole theoretical space (or large enough). 
+                        // Since our coordinate system is dynamic, we'll let overflow visible handle it?
+                        // Better: Set it to a huge size or match container but with viewbox? 
+                        // Simplest: 0x0 size with overflow visible
+                        width: 0, height: 0, overflow: 'visible'
+                    }}
+                >
+                    {/* Room Floor (Polygon) */}
+                    <polygon
+                        points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
+                        fill="rgba(255, 255, 255, 0.03)"
+                        stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
+                        strokeWidth={isRoomEditing ? 4 / scale : 2 / scale} // Stays thin visually or thick if editing
+                        strokeLinejoin="round"
+                    />
+
+                    {/* Vertex Handles (Only in Edit Mode) */}
+                    {isRoomEditing && boundary.map((p, i) => (
+                        <circle
+                            key={i}
+                            cx={p.x * PX_PER_FT}
+                            cy={p.y * PX_PER_FT}
+                            r={20 / scale} // Fixed visual size handle
+                            fill="var(--primary)"
+                            stroke="white"
+                            strokeWidth={2 / scale}
+                            onMouseDown={(e) => handleVertexDown(e, i)}
+                            onTouchStart={(e) => handleVertexDown(e, i)}
+                            style={{ cursor: 'pointer', touchAction: 'none' }}
+                        />
+                    ))}
+                </svg>
+
+                {/* Legacy Object Layer (Tables) */}
                 <div
                     style={{
                         position: 'absolute', left: pan.x, top: pan.y,
                         transform: `scale(${scale})`, transformOrigin: '0 0',
-                        width: canvasWidthPx, height: canvasHeightPx,
-                        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                        // Use box-shadow instead of border to prevent layout shift (border takes up space)
-                        boxShadow: '0 0 0 2px var(--primary-glow), 0 0 50px rgba(0,0,0,0.5)'
+                        // width/height don't matter as much now that boundary handles visual, 
+                        // but used for "Relative" calculations if needed?
+                        // We can remove the visual box styles now
+                        width: 0, height: 0
                     }}
                 >
                     {tables.map(table => {
+                        if (isRoomEditing) return null; // Hide tables while editing room
                         const isSelected = selectedTableId === table.id;
                         const wFt = table.width || DEFAULT_TABLE_W_FT;
                         const hFt = table.height || DEFAULT_TABLE_H_FT;
