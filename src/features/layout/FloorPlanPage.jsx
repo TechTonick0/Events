@@ -43,7 +43,18 @@ const FloorPlanPage = () => {
     const [showEventSettings, setShowEventSettings] = useState(false);
     const [isDraggingTable, setIsDraggingTable] = useState(false);
     const [isPanning, setIsPanning] = useState(false);
+
     const [isZooming, setIsZooming] = useState(false); // For Pinch Zoom
+
+    // State Mirrors for Event Handlers (Prevents Stale Closures during rapid events)
+    const scaleRef = useRef(1);
+    const panRef = useRef({ x: 0, y: 0 });
+
+    // Sync Refs with State
+    useEffect(() => {
+        scaleRef.current = scale;
+        panRef.current = pan;
+    }, [scale, pan]);
 
     const dragStart = useRef({ x: 0, y: 0 });
     const initialObjPos = useRef({ x: 0, y: 0 });
@@ -176,15 +187,48 @@ const FloorPlanPage = () => {
     // --- Interaction ---
 
     // -- Desktop: Wheel Zoom --
-    const handleWheel = (e) => {
+    // -- Desktop: Wheel Zoom (Native Listener attached in useEffect) --
+    // -- Desktop: Wheel Zoom (Native Listener attached in useEffect) --
+    const handleNativeWheel = (e) => {
         e.preventDefault();
-        if (e.ctrlKey) { } // Prevent standard zoom
+        if (e.ctrlKey) { }
+
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
 
         const sensitivity = 0.001;
         const delta = -e.deltaY * sensitivity;
-        const newScale = Math.min(Math.max(0.1, scale + delta * scale * 5), 5); // Use relative zoom
 
+        // Use Refs for fresh state during rapid scrolling
+        const oldScale = scaleRef.current || 1;
+        const currentPan = panRef.current || { x: 0, y: 0 };
+
+        let newScale = Math.min(Math.max(0.1, oldScale + delta * oldScale * 5), 5);
+        if (isNaN(newScale)) newScale = oldScale;
+
+        // Zoom to Point Math
+        const worldX = (mouseX - currentPan.x) / oldScale;
+        const worldY = (mouseY - currentPan.y) / oldScale;
+
+        let newPanX = mouseX - worldX * newScale;
+        let newPanY = mouseY - worldY * newScale;
+
+        // NaN Safety
+        if (isNaN(newPanX) || isNaN(newPanY)) {
+            newPanX = currentPan.x;
+            newPanY = currentPan.y;
+        }
+
+        // Update Refs immediately for next event (before render)
+        scaleRef.current = newScale;
+        panRef.current = { x: newPanX, y: newPanY };
+
+        // Update React State
         setScale(newScale);
+        setPan({ x: newPanX, y: newPanY });
     };
 
     // -- Mobile/Touch Logic --
@@ -231,12 +275,50 @@ const FloorPlanPage = () => {
     const handleMove = (e) => {
         // Pinch Zoom
         if (isZooming && e.touches && e.touches.length === 2) {
-            e.preventDefault(); // Stop browser pinch on this element
+            e.preventDefault(); // Stop browser pinch
+
+            const el = containerRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+
+            // Calculate center of pinch (screen coords)
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const centerX = ((t1.clientX + t2.clientX) / 2) - rect.left;
+            const centerY = ((t1.clientY + t2.clientY) / 2) - rect.top;
+
             const dist = getTouchDistance(e.touches);
+
             if (lastTouchDistance.current) {
                 const ratio = dist / lastTouchDistance.current;
-                const newScale = Math.min(Math.max(0.1, scale * ratio), 5);
+
+                // Use Refs
+                const oldScale = scaleRef.current || 1;
+                const currentPan = panRef.current || { x: 0, y: 0 };
+
+                let newScale = Math.min(Math.max(0.1, oldScale * ratio), 5);
+                if (isNaN(newScale)) newScale = oldScale;
+
+                // Zoom to Point Math (Pinch Center)
+                const worldX = (centerX - currentPan.x) / oldScale;
+                const worldY = (centerY - currentPan.y) / oldScale;
+
+                let newPanX = centerX - worldX * newScale;
+                let newPanY = centerY - worldY * newScale;
+
+                // NaN Safety
+                if (isNaN(newPanX) || isNaN(newPanY)) {
+                    newPanX = currentPan.x;
+                    newPanY = currentPan.y;
+                }
+
+                // Update Refs
+                scaleRef.current = newScale;
+                panRef.current = { x: newPanX, y: newPanY };
+
                 setScale(newScale);
+                setPan({ x: newPanX, y: newPanY });
+
                 lastTouchDistance.current = dist;
             }
             return;
@@ -299,28 +381,24 @@ const FloorPlanPage = () => {
         }
     };
 
+    // --- Event Listeners with Fresh Refs ---
+    const handleNativeWheelRef = useRef(handleNativeWheel);
+
+    useEffect(() => {
+        handleNativeWheelRef.current = handleNativeWheel;
+    });
+
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
 
-        const handleNativeWheel = (e) => {
-            e.preventDefault();
-            if (e.ctrlKey) { } // Prevent standard zoom if needed
-
-            const sensitivity = 0.001;
-            const delta = -e.deltaY * sensitivity;
-
-            setScale(prevScale => {
-                const newScale = Math.min(Math.max(0.1, prevScale + delta * prevScale * 5), 5);
-                return newScale;
-            });
-        };
+        const onWheel = (e) => handleNativeWheelRef.current(e);
 
         // Non-passive listener to allow preventDefault()
-        el.addEventListener('wheel', handleNativeWheel, { passive: false });
+        el.addEventListener('wheel', onWheel, { passive: false });
 
         return () => {
-            el.removeEventListener('wheel', handleNativeWheel);
+            el.removeEventListener('wheel', onWheel);
         };
     }, []);
 
@@ -626,9 +704,10 @@ const FloorPlanPage = () => {
                 }
                 @media (max-width: 600px) {
                     .mobile-edit-panel {
+                         position: fixed !important;
                          width: 100% !important;
                          top: auto !important;
-                         bottom: 80px !important;
+                         bottom: calc(90px + env(safe-area-inset-bottom)) !important;
                          left: 0 !important;
                          right: 0 !important;
                          height: 50vh !important;
@@ -638,6 +717,8 @@ const FloorPlanPage = () => {
                          pointer-events: auto !important;
                          animation-name: slideUp !important;
                          overflow: hidden !important; /* Hide shell overflow, scroll inner */
+                         z-index: 200 !important; /* Above fixed nav (100) */
+                         box-shadow: 0 -4px 20px rgba(0,0,0,0.4) !important;
                     }
                     .mobile-scroll-content {
                         flex: 1;
