@@ -183,9 +183,7 @@ const FloorPlanPage = () => {
             if (type === 'tenant' && vendorId) {
                 const maskedTables = tables.map(t => {
                     if (t.vendorId === vendorId) return t; // Keep own
-                    if (!t.vendorId) return t; // Keep empty
-                    // Mask others: Keep ID-based label, remove vendor name
-                    return { ...t, label: t.label.match(/^T-\d+$/) ? t.label : `T-${t.id.slice(0, 3)}` };
+                    return { ...t, vendorId: null }; // Hide others (Renderer will just show label)
                 });
                 updateEventTables(maskedTables);
                 await new Promise(r => setTimeout(r, 100)); // Render Wait
@@ -272,12 +270,8 @@ const FloorPlanPage = () => {
     const updateTable = (id, updates) => {
         const newTables = tables.map(t => {
             if (t.id === id) {
-                let newLabel = updates.label !== undefined ? updates.label : t.label;
-                if (updates.vendorId) {
-                    const vendor = vendors.find(v => v.id === updates.vendorId);
-                    if (vendor) newLabel = vendor.name;
-                }
-                return { ...t, ...updates, label: newLabel };
+                // Don't overwrite label with vendor name anymore. Use separate display.
+                return { ...t, ...updates };
             }
             return t;
         });
@@ -918,30 +912,28 @@ const FloorPlanPage = () => {
                                         ? `3px solid ${zones.find(z => z.id === table.zoneId)?.color || 'white'}` // Zone Border
                                         : `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`, // Default Border
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexDirection: 'column',
                                     color: 'white', fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
                                     boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
-                                    zIndex: isSelected ? 100 : 1, userSelect: 'none'
+                                    zIndex: isSelected ? 100 : 1, userSelect: 'none',
+                                    textAlign: 'center', lineHeight: 1.2
                                 }}
                             >
-                                <span style={{
-                                    pointerEvents: 'none',
-                                    position: 'absolute',
-                                    top: '50%',
-                                    left: '50%',
-                                    transform: isVertical
-                                        ? 'translate(-50%, -50%) rotate(-90deg)'
-                                        : 'translate(-50%, -50%)',
-                                    width: isVertical ? `${hFt * PX_PER_FT - 4}px` : `${wFt * PX_PER_FT - 4}px`,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    textAlign: 'center',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}>
-                                    {table.label}
-                                </span>
+                                <span style={{ pointerEvents: 'none' }}>{table.label}</span>
+                                {table.vendorId && (
+                                    <span style={{
+                                        pointerEvents: 'none',
+                                        fontSize: '0.8em',
+                                        fontWeight: 400,
+                                        opacity: 0.9,
+                                        maxWidth: '95%',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {vendors.find(v => v.id === table.vendorId)?.name}
+                                    </span>
+                                )}
                             </div>
                         );
                     })}
