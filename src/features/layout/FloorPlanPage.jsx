@@ -925,7 +925,7 @@ const FloorPlanPage = () => {
                                         : `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`, // Default Border
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexDirection: 'column',
-                                    color: 'var(--text-primary)', // Adaptive Color
+                                    color: 'white', // Reverted to white per user request
                                     fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
                                     boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
                                     zIndex: isSelected ? 100 : 1, userSelect: 'none',
