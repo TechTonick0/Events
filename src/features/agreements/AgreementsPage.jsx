@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import SignatureCanvas from 'react-signature-canvas';
-import { Save, Eraser, CheckCircle, PenTool } from 'lucide-react';
+import { Save, Eraser, CheckCircle, PenTool, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -48,6 +49,53 @@ const AgreementsPage = () => {
     };
 
     const getVendorAgreement = (vid) => agreements.find(a => a.vendorId === vid);
+
+    const downloadAgreement = (agreement) => {
+        const vendor = vendors.find(v => v.id === agreement.vendorId);
+        const doc = new jsPDF();
+
+        // Setup Font
+        doc.setFont("helvetica");
+
+        // Header
+        doc.setFontSize(22);
+        doc.text("Vendor Agreement", 20, 20);
+
+        doc.setFontSize(12);
+        doc.text(`Event: ${event.name}`, 20, 30);
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 36);
+        doc.text(`Vendor: ${vendor?.name || 'Unknown Vendor'}`, 20, 42);
+
+        // Divider
+        doc.setLineWidth(0.5);
+        doc.line(20, 45, 190, 45);
+
+        // Body Text (Wrapped)
+        doc.setFontSize(10);
+        const splitText = doc.splitTextToSize(agreementText, 170);
+        doc.text(splitText, 20, 55);
+
+        // Signature Area
+        // Calculate Y based on text height, but ensure it doesn't wrap off page (simple check)
+        let yPos = 55 + (splitText.length * 5) + 20;
+        if (yPos > 250) {
+            doc.addPage();
+            yPos = 30;
+        }
+
+        doc.text("Signed By:", 20, yPos);
+        doc.text(vendor?.name || 'Vendor', 20, yPos + 5);
+
+        // Signature Image
+        if (agreement.signature) {
+            doc.addImage(agreement.signature, 'PNG', 20, yPos + 10, 60, 30);
+        }
+
+        doc.text(`Timestamp: ${new Date(agreement.signedAt).toLocaleString()}`, 20, yPos + 45);
+
+        // Save
+        doc.save(`${event.name}_Agreement_${vendor?.name || 'Vendor'}.pdf`);
+    };
 
     if (!event) return <div className="page-container" style={{ marginTop: '50px' }}>Loading...</div>;
 
@@ -118,6 +166,11 @@ const AgreementsPage = () => {
                         <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
                             <CheckCircle size={18} />
                             <span style={{ fontSize: '13px' }}>Signed on {new Date(currentVendorAgreement.signedAt).toLocaleDateString()}</span>
+                            <div style={{ marginLeft: 'auto' }}>
+                                <Button size="sm" variant="outline" icon={Download} onClick={() => downloadAgreement(currentVendorAgreement)}>
+                                    Download PDF
+                                </Button>
+                            </div>
                         </div>
                     )}
 
