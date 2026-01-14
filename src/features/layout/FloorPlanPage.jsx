@@ -1079,7 +1079,7 @@ const FloorPlanPage = () => {
 
             {/* Bottom Toolbar */}
             <div style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0,
+                position: 'fixed', bottom: '80px', left: 0, right: 0,
                 height: '60px', background: 'var(--glass-bg)', borderTop: '1px solid var(--glass-border)',
                 backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'space-around',
                 zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)'

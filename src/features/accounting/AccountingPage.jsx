@@ -83,6 +83,12 @@ const AccountingPage = () => {
         }
     };
 
+    const deleteEntry = (id) => {
+        if (window.confirm('Delete this transaction?')) {
+            updateEventLedger(entries.filter(e => e.id !== id));
+        }
+    };
+
     const stats = useMemo(() => {
         const calc = (phase) => {
             const income = entries

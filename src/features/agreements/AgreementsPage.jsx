@@ -45,7 +45,7 @@ const AgreementsPage = () => {
 
         alert('Signature saved!');
         sigPad.current.clear();
-        setSelectedVendorId('');
+        // setSelectedVendorId(''); // Keep selected to show confirmation
     };
 
     const getVendorAgreement = (vid) => agreements.find(a => a.vendorId === vid);
