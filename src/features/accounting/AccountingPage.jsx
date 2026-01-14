@@ -150,12 +150,15 @@ const AccountingPage = () => {
             <Card title="Add Item" style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <div style={{ flex: 1, minWidth: '120px' }}>
-                        <Input label="Category" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} />
+                        <Input label="Category" placeholder="e.g. Venue, Staff" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} />
                     </div>
-                    <div style={{ width: '120px' }}>
+                    <div style={{ flex: 1, minWidth: '120px' }}>
+                        <Input label="Payee / Source (Optional)" placeholder="e.g. Convention Center" value={newItem.payee || ''} onChange={e => setNewItem({ ...newItem, payee: e.target.value })} />
+                    </div>
+                    <div style={{ width: '100px' }}>
                         <Input label="Amount ($)" type="number" value={newItem.amount} onChange={e => setNewItem({ ...newItem, amount: e.target.value })} />
                     </div>
-                    <div style={{ width: '120px', marginBottom: '16px' }}>
+                    <div style={{ width: '110px', marginBottom: '16px' }}>
                         <label style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Type</label>
                         <select
                             style={{ width: '100%', padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'white', borderRadius: '8px' }}
@@ -183,6 +186,54 @@ const AccountingPage = () => {
                         </div>
                     </div>
                 )}
+            </Card>
+
+            {/* Transaction List */}
+            <Card title="Transactions">
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px', fontSize: '14px' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                <th style={{ padding: '12px' }}>Category</th>
+                                <th style={{ padding: '12px' }}>Payee</th>
+                                <th style={{ padding: '12px' }}>Type</th>
+                                <th style={{ padding: '12px' }}>Phase</th>
+                                <th style={{ padding: '12px', textAlign: 'right' }}>Amount</th>
+                                <th style={{ padding: '12px' }}></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {entries.length === 0 && (
+                                <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>No transactions recorded.</td></tr>
+                            )}
+                            {[...entries].reverse().map(entry => (
+                                <tr key={entry.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <td style={{ padding: '12px' }}>{entry.category}</td>
+                                    <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{entry.payee || '-'}</td>
+                                    <td style={{ padding: '12px' }}>
+                                        <span style={{
+                                            color: entry.type === 'income' ? 'var(--success)' : 'var(--danger)',
+                                            background: entry.type === 'income' ? 'rgba(74, 222, 128, 0.1)' : 'rgba(244, 63, 94, 0.1)',
+                                            padding: '4px 8px', borderRadius: '4px', fontSize: '12px'
+                                        }}>
+                                            {entry.type}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: '12px', textTransform: 'capitalize' }}>{entry.phase}</td>
+                                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600 }}>${entry.amount.toLocaleString()}</td>
+                                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                                        <button
+                                            onClick={() => deleteEntry(entry.id)}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </Card>
         </div>
     );
