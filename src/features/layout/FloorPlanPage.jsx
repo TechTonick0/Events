@@ -407,7 +407,7 @@ const FloorPlanPage = () => {
                 newX = pNext.x; // Snap to next X
                 activeSnapLines.push({ x1: newX, y1: newY, x2: pNext.x, y2: pNext.y });
             } else {
-                newX = Math.round(newX * 10) / 10; // Default: Snap to 0.1ft
+                newX = Math.round(newX); // Default: Snap to 1ft Grid
             }
 
             // Snap Y
@@ -418,7 +418,7 @@ const FloorPlanPage = () => {
                 newY = pNext.y;
                 activeSnapLines.push({ x1: newX, y1: newY, x2: pNext.x, y2: pNext.y });
             } else {
-                newY = Math.round(newY * 10) / 10;
+                newY = Math.round(newY); // Default: Snap to 1ft Grid
             }
 
             setSnapLines(activeSnapLines);
@@ -612,7 +612,7 @@ const FloorPlanPage = () => {
                         position: 'absolute', left: 0, top: 0,
                         width: '100%', height: '100%',
                         pointerEvents: 'none', // Let clicks pass through empty areas
-                        zIndex: 10
+                        zIndex: 0 // SVG Layer behind legacy div
                     }}
                 >
                     <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
@@ -623,7 +623,7 @@ const FloorPlanPage = () => {
                             stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
                             strokeWidth={isRoomEditing ? 4 / scale : 2 / scale}
                             strokeLinejoin="round"
-                            style={{ pointerEvents: 'visiblePainted' }}
+                            style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
                         />
 
                         {/* Snap Guides */}
