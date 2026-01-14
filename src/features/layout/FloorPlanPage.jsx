@@ -647,13 +647,21 @@ const FloorPlanPage = () => {
                         {roomWidthFt}ft x {roomHeightFt}ft
                     </div>
 
+                    {/* Integrated Zone & Export Controls */}
+                    <Button variant={isZoneEditing ? 'primary' : 'ghost'} size="sm" onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} title="Edit Zones">
+                        <Layers size={18} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={handleExport} title="Export Layout">
+                        <Download size={18} />
+                    </Button>
+
                     <Button
                         variant={isRoomEditing ? 'primary' : 'outline'}
                         size="sm"
                         onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); }}
                         title="Edit Room Shape"
                     >
-                        <Maximize size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
+                        <Grid size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
                     </Button>
                     <Button
                         variant={showEventSettings ? 'primary' : 'ghost'}
@@ -808,10 +816,10 @@ const FloorPlanPage = () => {
                                     top: table.y * PX_PER_FT,
                                     width: wFt * PX_PER_FT,
                                     height: hFt * PX_PER_FT,
-                                    backgroundColor: table.zoneId
-                                        ? (zones.find(z => z.id === table.zoneId)?.color || getStatusColor(table.status, isSelected))
-                                        : getStatusColor(table.status, isSelected),
-                                    border: `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`,
+                                    backgroundColor: getStatusColor(table.status, isSelected), // Always show status fill
+                                    border: table.zoneId
+                                        ? `3px solid ${zones.find(z => z.id === table.zoneId)?.color || 'white'}` // Zone Border
+                                        : `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`, // Default Border
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     color: 'white', fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
                                     boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
@@ -1077,19 +1085,7 @@ const FloorPlanPage = () => {
 
 
 
-            {/* Bottom Toolbar */}
-            <div style={{
-                position: 'fixed', bottom: '80px', left: 0, right: 0,
-                height: '60px', background: 'var(--glass-bg)', borderTop: '1px solid var(--glass-border)',
-                backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-                zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)'
-            }}>
-                <Button variant={isRoomEditing ? 'primary' : 'ghost'} onClick={() => { setIsRoomEditing(!isRoomEditing); setIsZoneEditing(false); }} icon={Grid} title="Edit Room Shape" />
-                <Button variant={isZoneEditing ? 'primary' : 'ghost'} onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} icon={Layers} title="Edit Zones" />
-                <Button variant="ghost" onClick={addTable} icon={Plus} title="Add Table" />
-                <Button variant="ghost" onClick={fitToScreen} icon={Maximize} title="Fit to Screen" />
-                <Button variant="ghost" onClick={handleExport} icon={Download} title="Export Layout" />
-            </div>
+            {/* Bottom Toolbar Removed - Features moved to Top Toolbar */}
 
             <style>{`
                 @keyframes slideLeft {
