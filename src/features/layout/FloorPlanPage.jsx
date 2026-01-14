@@ -160,6 +160,77 @@ const FloorPlanPage = () => {
         }
     };
 
+    // --- Advanced Export Logic ---
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+    const handleAdvancedExport = async (type, vendorId = null) => {
+        if (!containerRef.current) return;
+
+        // Close menus
+        setExportMenuOpen(false);
+        setIsRoomEditing(false);
+        setIsZoneEditing(false);
+        setSelectedTableId(null);
+
+        // Wait for UI to clear
+        await new Promise(r => setTimeout(r, 100));
+
+        try {
+            // 1. Prepare View (Hide/Show items based on type)
+            const originalTables = JSON.parse(JSON.stringify(tables));
+
+            // For Tenant View: Mask other vendors
+            if (type === 'tenant' && vendorId) {
+                const maskedTables = tables.map(t => {
+                    if (t.vendorId === vendorId) return t; // Keep own
+                    if (!t.vendorId) return t; // Keep empty
+                    // Mask others: Keep ID-based label, remove vendor name
+                    return { ...t, label: t.label.match(/^T-\d+$/) ? t.label : `T-${t.id.slice(0, 3)}` };
+                });
+                updateEventTables(maskedTables);
+                await new Promise(r => setTimeout(r, 100)); // Render Wait
+            }
+
+            const canvas = await html2canvas(containerRef.current, {
+                useCORS: true,
+                scale: 2, // High Res
+                backgroundColor: '#1a1a1e'
+            });
+
+            // Revert State if Tenant View
+            if (type === 'tenant') {
+                updateEventTables(originalTables);
+            }
+
+            // 2. Generate PDF
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+
+            // Add Banner Info
+            pdf.setFontSize(24);
+            pdf.setTextColor(255, 255, 255);
+            pdf.text(event.name, 40, 40);
+            pdf.setFontSize(16);
+            if (type === 'tenant') {
+                const vName = vendors.find(v => v.id === vendorId)?.name;
+                pdf.text(`Vendor Map for: ${vName}`, 40, 65);
+            } else {
+                pdf.text('Floor Plan', 40, 65);
+            }
+
+            pdf.save(`${event.name}_FloorPlan_${type}.pdf`);
+
+        } catch (err) {
+            console.error(err);
+            alert("Export failed");
+        }
+    };
+
 
 
     // --- Vertex Interaction ---
@@ -601,22 +672,7 @@ const FloorPlanPage = () => {
 
     const selectedTable = getSelectedTable();
 
-    const handleExport = async () => {
-        if (!containerRef.current) return;
-        try {
-            const canvas = await html2canvas(containerRef.current, {
-                backgroundColor: '#1a1a1a', // Match theme
-                scale: 2 // High res
-            });
-            const link = document.createElement('a');
-            link.download = `${event.name || 'Layout'}_FloorPlan.png`;
-            link.href = canvas.toDataURL();
-            link.click();
-        } catch (err) {
-            console.error("Export failed:", err);
-            alert("Could not export layout.");
-        }
-    };
+
 
     return (
         <div
