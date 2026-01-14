@@ -368,7 +368,7 @@ const FloorPlanPage = () => {
             return;
         }
 
-        if (!isDraggingTable && !isPanning) return;
+        if (!isDraggingTable && !isPanning && draggingVertexIndex === null) return;
 
         if (e.touches && e.touches.length > 1) return; // Don't pan if multi-touch
 
