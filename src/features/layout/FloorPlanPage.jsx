@@ -121,9 +121,43 @@ const FloorPlanPage = () => {
             };
         }
         if (updates.name) updatedEvents[eventIndex].name = updates.name;
-        if (updates.date) updatedEvents[eventIndex].date = updates.date;
+        if (updates.boundary) {
+            updatedEvents[eventIndex].settings.boundary = updates.boundary;
+        }
 
         setEvents(updatedEvents);
+    };
+
+    // --- Vertex Interaction ---
+    const handleVertexDown = (e, index) => {
+        e.stopPropagation(); // prevent panning
+        if (e.button === 2) return; // Ignore right click
+
+        setDraggingVertexIndex(index);
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        dragStart.current = { x: clientX, y: clientY };
+        initialObjPos.current = { ...boundary[index] };
+    };
+
+    const insertVertex = (indexAfter) => {
+        const newBoundary = [...boundary];
+        const p1 = boundary[indexAfter];
+        const p2 = boundary[(indexAfter + 1) % boundary.length];
+
+        // Midpoint
+        const midX = Math.round((p1.x + p2.x) / 2);
+        const midY = Math.round((p1.y + p2.y) / 2);
+
+        // Insert at indexAfter + 1
+        newBoundary.splice(indexAfter + 1, 0, { x: midX, y: midY });
+        updateEventSettings({ boundary: newBoundary });
+    };
+
+    const deleteVertex = (index) => {
+        if (boundary.length <= 3) return; // Minimum triangle
+        const newBoundary = boundary.filter((_, i) => i !== index);
+        updateEventSettings({ boundary: newBoundary });
     };
 
     const getSelectedTable = () => tables.find(t => t.id === selectedTableId);
