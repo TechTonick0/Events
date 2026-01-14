@@ -900,185 +900,188 @@ const FloorPlanPage = () => {
                             <div style={{ marginBottom: 'auto' }}>
                                 <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Vendor</label>
                                 <select
-                                    width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
-                                padding: '10px', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none'
-                                }}
-                            >
-                                <option value="">(None)</option>
-                                {vendors.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Zone Assignment */}
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Zone</label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                <button
-                                    onClick={() => updateSelectedTable({ zoneId: null })}
+                                    value={selectedTable.vendorId || ''}
+                                    onChange={(e) => updateSelectedTable({ vendorId: e.target.value })}
                                     style={{
-                                        padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
-                                        border: !selectedTable.zoneId ? '1px solid white' : '1px solid var(--glass-border)',
-                                        background: 'transparent', color: 'white'
+                                        width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
+                                        padding: '10px', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none'
                                     }}
                                 >
-                                    None
-                                </button>
-                                {zones.map(z => (
+                                    <option value="">(None)</option>
+                                    {vendors.map(v => (
+                                        <option key={v.id} value={v.id}>{v.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Zone Assignment */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Zone</label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                     <button
-                                        key={z.id}
-                                        onClick={() => updateSelectedTable({ zoneId: z.id })}
+                                        onClick={() => updateSelectedTable({ zoneId: null })}
                                         style={{
                                             padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
-                                            border: selectedTable.zoneId === z.id ? '1px solid white' : '1px solid transparent',
-                                            background: z.color, color: 'white'
+                                            border: !selectedTable.zoneId ? '1px solid white' : '1px solid var(--glass-border)',
+                                            background: 'transparent', color: 'white'
                                         }}
                                     >
-                                        {z.name}
+                                        None
                                     </button>
+                                    {zones.map(z => (
+                                        <button
+                                            key={z.id}
+                                            onClick={() => updateSelectedTable({ zoneId: z.id })}
+                                            style={{
+                                                padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
+                                                border: selectedTable.zoneId === z.id ? '1px solid white' : '1px solid transparent',
+                                                background: z.color, color: 'white'
+                                            }}
+                                        >
+                                            {z.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete Table</Button>
+                        </div>
+                    </div>
+                )
+                }
+
+                {/* Zone Manager Panel */}
+                {
+                    isZoneEditing && (
+                        <div
+                            className="glass-panel mobile-edit-panel"
+                            onTouchStart={(e) => e.stopPropagation()}
+                            style={{
+                                position: 'absolute',
+                                top: '60px', bottom: '80px', right: '0',
+                                width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                                animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
+                                display: 'flex', flexDirection: 'column'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                <h3 style={{ fontSize: '16px' }}>Manage Zones</h3>
+                                <Button variant="ghost" size="sm" onClick={() => setIsZoneEditing(false)}><X size={18} /></Button>
+                            </div>
+
+                            <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <Button variant="primary" onClick={addZone} icon={Plus}>Add New Zone</Button>
+
+                                {zones.map((zone, i) => (
+                                    <div key={zone.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                            <Input
+                                                value={zone.name}
+                                                onChange={(e) => {
+                                                    const newZones = [...zones];
+                                                    newZones[i].name = e.target.value;
+                                                    updateEventSettings({ zones: newZones });
+                                                }}
+                                            />
+                                            <input
+                                                type="color"
+                                                value={zone.color}
+                                                onChange={(e) => {
+                                                    const newZones = [...zones];
+                                                    newZones[i].color = e.target.value;
+                                                    updateEventSettings({ zones: newZones });
+                                                }}
+                                                style={{ width: '40px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <Input
+                                                type="number" label="Price"
+                                                value={zone.price}
+                                                onChange={(e) => {
+                                                    const newZones = [...zones];
+                                                    newZones[i].price = e.target.value;
+                                                    updateEventSettings({ zones: newZones });
+                                                }}
+                                            />
+                                            <Button variant="danger" size="sm" onClick={() => deleteZone(zone.id)}><Trash2 size={16} /></Button>
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
+                    )
+                }
 
-                        <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete Table</Button>
-                    </div>
-                </div>
-        )
-    }
-
-    {/* Zone Manager Panel */ }
-    {
-        isZoneEditing && (
-            <div
-                className="glass-panel mobile-edit-panel"
-                onTouchStart={(e) => e.stopPropagation()}
-                style={{
-                    position: 'absolute',
-                    top: '60px', bottom: '80px', right: '0',
-                    width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
-                    animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
-                    display: 'flex', flexDirection: 'column'
-                }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <h3 style={{ fontSize: '16px' }}>Manage Zones</h3>
-                    <Button variant="ghost" size="sm" onClick={() => setIsZoneEditing(false)}><X size={18} /></Button>
-                </div>
-
-                <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Button variant="primary" onClick={addZone} icon={Plus}>Add New Zone</Button>
-
-                    {zones.map((zone, i) => (
-                        <div key={zone.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
-                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                                <Input
-                                    value={zone.name}
-                                    onChange={(e) => {
-                                        const newZones = [...zones];
-                                        newZones[i].name = e.target.value;
-                                        updateEventSettings({ zones: newZones });
-                                    }}
-                                />
-                                <input
-                                    type="color"
-                                    value={zone.color}
-                                    onChange={(e) => {
-                                        const newZones = [...zones];
-                                        newZones[i].color = e.target.value;
-                                        updateEventSettings({ zones: newZones });
-                                    }}
-                                    style={{ width: '40px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                />
+                {/* Right Side Panel: Event Settings */}
+                {
+                    showEventSettings && !selectedTable && !isDraggingTable && (
+                        <div
+                            className="glass-panel mobile-edit-panel"
+                            onTouchStart={(e) => e.stopPropagation()}
+                            style={{
+                                position: 'absolute',
+                                top: '60px', bottom: '80px', right: '0',
+                                width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                                animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
+                                display: 'flex', flexDirection: 'column'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                <h3 style={{ fontSize: '16px' }}>Event Settings</h3>
+                                <Button variant="ghost" size="sm" onClick={() => setShowEventSettings(false)}><X size={18} /></Button>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+
+                            <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 <Input
-                                    type="number" label="Price"
-                                    value={zone.price}
-                                    onChange={(e) => {
-                                        const newZones = [...zones];
-                                        newZones[i].price = e.target.value;
-                                        updateEventSettings({ zones: newZones });
-                                    }}
+                                    label="Event Name"
+                                    value={event.name}
+                                    onChange={(e) => updateEventSettings({ name: e.target.value })}
                                 />
-                                <Button variant="danger" size="sm" onClick={() => deleteZone(zone.id)}><Trash2 size={16} /></Button>
+
+                                <Input
+                                    label="Date"
+                                    type="date"
+                                    value={event.date}
+                                    onChange={(e) => updateEventSettings({ date: e.target.value })}
+                                />
+
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <Input
+                                        label="Venue Width (ft)" type="number"
+                                        value={event.settings.width}
+                                        onChange={(e) => updateEventSettings({ width: parseInt(e.target.value) || 1 })}
+                                    />
+                                    <Input
+                                        label="Venue Height (ft)" type="number"
+                                        value={event.settings.height}
+                                        onChange={(e) => updateEventSettings({ height: parseInt(e.target.value) || 1 })}
+                                    />
+                                </div>
+
+                                <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)' }}>
+                                    <Button variant="danger" onClick={deleteEvent} icon={Trash2}>Delete Event</Button>
+                                </div>
                             </div>
                         </div>
-                    ))}
-                </div>
-            </div>
-        )
-    }
+                    )
+                }
 
-    {/* Right Side Panel: Event Settings */ }
-    {
-        showEventSettings && !selectedTable && !isDraggingTable && (
-            <div
-                className="glass-panel mobile-edit-panel"
-                onTouchStart={(e) => e.stopPropagation()}
-                style={{
-                    position: 'absolute',
-                    top: '60px', bottom: '80px', right: '0',
-                    width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
-                    animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
-                    display: 'flex', flexDirection: 'column'
-                }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <h3 style={{ fontSize: '16px' }}>Event Settings</h3>
-                    <Button variant="ghost" size="sm" onClick={() => setShowEventSettings(false)}><X size={18} /></Button>
+                {/* Bottom Toolbar */}
+                <div style={{
+                    position: 'fixed', bottom: 0, left: 0, right: 0,
+                    height: '60px', background: 'var(--glass-bg)', borderTop: '1px solid var(--glass-border)',
+                    backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+                    zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom)'
+                }}>
+                    <Button variant={isRoomEditing ? 'primary' : 'ghost'} onClick={() => { setIsRoomEditing(!isRoomEditing); setIsZoneEditing(false); }} icon={Grid} title="Edit Room Shape" />
+                    <Button variant={isZoneEditing ? 'primary' : 'ghost'} onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} icon={Layers} title="Edit Zones" />
+                    <Button variant="ghost" onClick={addTable} icon={Plus} title="Add Table" />
+                    <Button variant="ghost" onClick={fitToScreen} icon={Maximize} title="Fit to Screen" />
+                    <Button variant="ghost" onClick={handleExport} icon={Download} title="Export Layout" />
                 </div>
 
-                <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Input
-                        label="Event Name"
-                        value={event.name}
-                        onChange={(e) => updateEventSettings({ name: e.target.value })}
-                    />
-
-                    <Input
-                        label="Date"
-                        type="date"
-                        value={event.date}
-                        onChange={(e) => updateEventSettings({ date: e.target.value })}
-                    />
-
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        <Input
-                            label="Venue Width (ft)" type="number"
-                            value={event.settings.width}
-                            onChange={(e) => updateEventSettings({ width: parseInt(e.target.value) || 1 })}
-                        />
-                        <Input
-                            label="Venue Height (ft)" type="number"
-                            value={event.settings.height}
-                            onChange={(e) => updateEventSettings({ height: parseInt(e.target.value) || 1 })}
-                        />
-                    </div>
-
-                    <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)' }}>
-                        <Button variant="danger" onClick={deleteEvent} icon={Trash2}>Delete Event</Button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
-    {/* Bottom Toolbar */ }
-            <div style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0,
-                height: '60px', background: 'var(--glass-bg)', borderTop: '1px solid var(--glass-border)',
-                backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-                zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom)'
-            }}>
-                <Button variant={isRoomEditing ? 'primary' : 'ghost'} onClick={() => { setIsRoomEditing(!isRoomEditing); setIsZoneEditing(false); }} icon={Grid} title="Edit Room Shape" />
-                <Button variant={isZoneEditing ? 'primary' : 'ghost'} onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); }} icon={Layers} title="Edit Zones" />
-                <Button variant="ghost" onClick={addTable} icon={Plus} title="Add Table" />
-                <Button variant="ghost" onClick={fitToScreen} icon={Maximize} title="Fit to Screen" />
-                <Button variant="ghost" onClick={handleExport} icon={Download} title="Export Layout" />
-            </div>
-
-    <style>{`
+                <style>{`
                 @keyframes slideLeft {
                     from { transform: translateX(100%); }
                     to { transform: translateX(0); }
@@ -1122,8 +1125,8 @@ const FloorPlanPage = () => {
                     to { transform: translateY(0); }
                 }
             `}</style>
-        </div >
-    );
-};
+            </div >
+        );
+    };
 
-export default FloorPlanPage;
+    export default FloorPlanPage;
