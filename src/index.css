@@ -21,6 +21,8 @@
   --glass-bg: rgba(24, 24, 27, 0.65);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-blur: 12px;
+  --grid-color: #2a2a30;
+  /* Default Dark Grid */
 
   /* Status Colors */
   --success: #10b981;
@@ -216,4 +218,24 @@ button {
 
 .menu-item:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* Printer Friendly Mode (Applied temporarily during export) */
+.print-map {
+  --bg-app: #ffffff !important;
+  --text-primary: #000000 !important;
+  --text-muted: #4b5563 !important;
+  --glass-border: rgba(0, 0, 0, 0.2) !important;
+  --glass-bg: rgba(255, 255, 255, 0.9) !important;
+  --grid-color: #e5e7eb !important;
+  /* Light Gray */
+}
+
+.print-map polygon {
+  stroke: #000000 !important;
+}
+
+.print-map .glass-panel {
+  background: white !important;
+  border-color: #ccc !important;
 }

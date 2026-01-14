@@ -187,13 +187,25 @@ const FloorPlanPage = () => {
                 });
                 updateEventTables(maskedTables);
                 await new Promise(r => setTimeout(r, 100)); // Render Wait
+                await new Promise(r => setTimeout(r, 100)); // Render Wait
             }
+
+            // Print Mode (Light Background)
+            if (containerRef.current) {
+                containerRef.current.classList.add('print-map');
+            }
+            // Wait for styles to apply
+            await new Promise(r => setTimeout(r, 100));
 
             const canvas = await html2canvas(containerRef.current, {
                 useCORS: true,
                 scale: 2, // High Res
-                backgroundColor: '#1a1a1e'
+                backgroundColor: '#ffffff', // White for Print
+                logging: false
             });
+
+            // Revert styles
+            if (containerRef.current) containerRef.current.classList.remove('print-map');
 
             // Revert State if Tenant View
             if (type === 'tenant') {
@@ -211,7 +223,7 @@ const FloorPlanPage = () => {
 
             // Add Banner Info
             pdf.setFontSize(24);
-            pdf.setTextColor(255, 255, 255);
+            pdf.setTextColor(0, 0, 0); // Black Text for Print
             pdf.text(event.name, 40, 40);
             pdf.setFontSize(16);
             if (type === 'tenant') {
@@ -769,9 +781,9 @@ const FloorPlanPage = () => {
                 ref={containerRef}
                 style={{
                     flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'grab',
-                    touchAction: 'none', backgroundColor: '#1a1a1e',
+                    touchAction: 'none', backgroundColor: 'var(--bg-app)',
                     // Infinite Grid Effect:
-                    backgroundImage: `linear-gradient(#2a2a30 1px, transparent 1px), linear-gradient(90deg, #2a2a30 1px, transparent 1px)`,
+                    backgroundImage: `linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)`,
                     backgroundSize: `${PX_PER_FT * scale}px ${PX_PER_FT * scale}px`,
                     backgroundPosition: `${pan.x}px ${pan.y}px`,
                 }}
@@ -913,7 +925,8 @@ const FloorPlanPage = () => {
                                         : `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`, // Default Border
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexDirection: 'column',
-                                    color: 'white', fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
+                                    color: 'var(--text-primary)', // Adaptive Color
+                                    fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
                                     boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
                                     zIndex: isSelected ? 100 : 1, userSelect: 'none',
                                     textAlign: 'center', lineHeight: 1.2
