@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Calculator, Trash2 } from 'lucide-react';
+import { Calculator, Trash2, FileSpreadsheet, FileText } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { jsPDF } from "jspdf";
 import useLocalStorage from '../../hooks/useLocalStorage';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -105,6 +106,77 @@ const AccountingPage = () => {
         };
     }, [entries]);
 
+    const handleExportCSV = () => {
+        const headers = ["Type,Category,Payee,Phase,Amount"];
+        const rows = entries.map(e =>
+            `${e.type},"${e.category}","${e.payee || ''}",${e.phase},${e.amount}`
+        );
+        const csvContent = "data:text/csv;charset=utf-8,"
+            + headers.concat(rows).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${event.name || 'Event'}_financials.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+
+        doc.setFontSize(20);
+        doc.text("Financial Report", 14, 20);
+        doc.setFontSize(14);
+        doc.text(event.name || "Event Name", 14, 30);
+
+        doc.setFontSize(12);
+        doc.text("Summary", 14, 45);
+
+        // Projected
+        doc.setFontSize(10);
+        doc.text(`Projected Income: $${stats.projected.income.toFixed(2)}`, 14, 55);
+        doc.text(`Projected Expenses: $${stats.projected.expenses.toFixed(2)}`, 14, 60);
+        doc.text(`Projected Net: $${stats.projected.profit.toFixed(2)}`, 14, 65);
+
+        // Actual
+        doc.text(`Actual Income: $${stats.actual.income.toFixed(2)}`, 110, 55);
+        doc.text(`Actual Expenses: $${stats.actual.expenses.toFixed(2)}`, 110, 60);
+        doc.text(`Actual Net: $${stats.actual.profit.toFixed(2)}`, 110, 65);
+
+        // Details
+        doc.setFontSize(12);
+        doc.text("Transaction Details", 14, 80);
+
+        let y = 90;
+        doc.setFontSize(10);
+
+        // Headers
+        doc.setFont(undefined, 'bold');
+        doc.text("Date", 14, y); // Placeholder if we had distinct dates
+        doc.text("Type", 40, y);
+        doc.text("Category / Payee", 70, y);
+        doc.text("Amount", 170, y);
+        doc.setFont(undefined, 'normal');
+
+        y += 10;
+
+        entries.forEach((e) => {
+            if (y > 280) {
+                doc.addPage();
+                y = 20;
+            }
+            const label = e.payee ? `${e.category} (${e.payee})` : e.category;
+            doc.text(e.phase.substring(0, 1).toUpperCase() + e.phase.substring(1), 14, y);
+            doc.text(e.type, 40, y);
+            doc.text(label, 70, y);
+            doc.text(`$${e.amount.toFixed(2)}`, 170, y);
+            y += 7;
+        });
+
+        doc.save(`${event.name || 'Event'}_financials.pdf`);
+    };
+
     const chartData = [
         { name: 'Income', Projected: stats.projected.income, Actual: stats.actual.income },
         { name: 'Expenses', Projected: stats.projected.expenses, Actual: stats.actual.expenses },
@@ -115,9 +187,19 @@ const AccountingPage = () => {
 
     return (
         <div className="page-container" style={{ paddingBottom: '100px', marginTop: '50px' }}>
-            <header style={{ marginBottom: '24px' }}>
-                <h1 className="text-gradient" style={{ fontSize: '28px' }}>Financials</h1>
-                <p style={{ color: 'var(--text-secondary)' }}>{event.name}</p>
+            <header style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="text-gradient" style={{ fontSize: '28px' }}>Financials</h1>
+                    <p style={{ color: 'var(--text-secondary)' }}>{event.name}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button onClick={handleExportCSV} variant="outline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FileSpreadsheet size={16} /> Export CSV
+                    </Button>
+                    <Button onClick={handleExportPDF} variant="outline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FileText size={16} /> Export PDF
+                    </Button>
+                </div>
             </header>
 
             {/* Quick Stats */}
