@@ -199,6 +199,10 @@ const FloorPlanPage = () => {
             // Print Mode (Light Background)
             if (containerRef.current) {
                 containerRef.current.classList.add('print-map');
+                // Only show pop-out labels for individual vendor view
+                if (type === 'tenant') {
+                    containerRef.current.classList.add('with-labels');
+                }
             }
             // Wait for styles to apply
             await new Promise(r => setTimeout(r, 100));
@@ -211,7 +215,10 @@ const FloorPlanPage = () => {
             });
 
             // Revert styles & view
-            if (containerRef.current) containerRef.current.classList.remove('print-map');
+            if (containerRef.current) {
+                containerRef.current.classList.remove('print-map');
+                containerRef.current.classList.remove('with-labels');
+            }
             setScale(originalScale);
             setPan(originalPan);
 
@@ -267,6 +274,45 @@ const FloorPlanPage = () => {
                 pdf.text(`Vendor Map: ${vName} (${vTables})`, margin, margin + 45);
             } else {
                 pdf.text('Overall Floor Plan', margin, margin + 45);
+
+                // --- GENERATE VENDOR DIRECTORY PAGE ---
+                pdf.addPage();
+                pdf.setFontSize(18);
+                pdf.text("Vendor Directory", margin, margin + 20);
+
+                pdf.setFontSize(12);
+                let currentY = margin + 50;
+                const lineHeight = 18;
+
+                // Sort Vendors A-Z
+                const sortedVendors = [...vendors].sort((a, b) => a.name.localeCompare(b.name));
+
+                sortedVendors.forEach((v) => {
+                    const vTables = tables.filter(t => t.vendorId === v.id).map(t => t.label).join(', ');
+                    if (!vTables) return; // Skip unassigned vendors
+
+                    if (currentY > docHeight - margin) {
+                        pdf.addPage();
+                        currentY = margin + 50;
+                    }
+
+                    // Draw dots leader
+                    const nameText = v.name + " ";
+                    const tableText = " " + vTables;
+                    const nameWidth = pdf.getTextWidth(nameText);
+                    const tableWidth = pdf.getTextWidth(tableText);
+                    const dotsWidth = docWidth - (margin * 2) - nameWidth - tableWidth;
+
+                    let dots = "";
+                    if (dotsWidth > 0) {
+                        const dotWidth = pdf.getTextWidth(".");
+                        const numDots = Math.floor(dotsWidth / dotWidth);
+                        dots = ".".repeat(numDots);
+                    }
+
+                    pdf.text(nameText + dots + tableText, margin, currentY);
+                    currentY += lineHeight;
+                });
             }
 
             pdf.save(`${event.name}_FloorPlan_${type}.pdf`);
