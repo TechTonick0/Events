@@ -220,9 +220,10 @@ const FloorPlanPage = () => {
                 updateEventTables(originalTables);
             }
 
-            // 2. Generate PDF (Letter Landscape)
+            // 2. Generate PDF (Auto-Rotate to fit Map)
+            const isLandscape = canvas.width >= canvas.height;
             const pdf = new jsPDF({
-                orientation: 'landscape',
+                orientation: isLandscape ? 'landscape' : 'portrait',
                 unit: 'pt',
                 format: 'letter'
             });
@@ -236,9 +237,8 @@ const FloorPlanPage = () => {
             const contentWidth = docWidth - (margin * 2);
             const contentHeight = docHeight - (margin * 2) - headerHeight;
 
-            const imgProps = pdf.getImageProperties(canvas.toDataURL('image/png'));
-            const imgRatio = imgProps.width / imgProps.height;
-            const pageRatio = contentWidth / contentHeight;
+            // Image Scaling
+            const imgRatio = canvas.width / canvas.height;
 
             let finalW = contentWidth;
             let finalH = contentWidth / imgRatio;
@@ -250,9 +250,9 @@ const FloorPlanPage = () => {
 
             // Center Image
             const x = (docWidth - finalW) / 2;
-            const y = headerHeight + margin; // Below header
+            const y = headerHeight + margin;
 
-            pdf.addImage(imgProps.data, 'PNG', x, y, finalW, finalH);
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, finalW, finalH);
 
             // Add Banner Info (Scaled)
             pdf.setFontSize(24);
@@ -272,7 +272,7 @@ const FloorPlanPage = () => {
 
         } catch (err) {
             console.error(err);
-            alert("Export failed");
+            alert("Export failed: " + err.message);
         }
     };
 
