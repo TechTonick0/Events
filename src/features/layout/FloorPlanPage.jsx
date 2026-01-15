@@ -946,6 +946,7 @@ const FloorPlanPage = () => {
                         return (
                             <div
                                 key={table.id}
+                                className="map-table"
                                 onMouseDown={(e) => handleTableDown(e, table)}
                                 onTouchStart={(e) => handleTableDown(e, table)}
                                 style={{
@@ -967,9 +968,9 @@ const FloorPlanPage = () => {
                                     textAlign: 'center', lineHeight: 1.2
                                 }}
                             >
-                                <span style={{ pointerEvents: 'none' }}>{table.label}</span>
+                                <span className="table-label" style={{ pointerEvents: 'none' }}>{table.label}</span>
                                 {table.vendorId && (
-                                    <span style={{
+                                    <span className="vendor-name" style={{
                                         pointerEvents: 'none',
                                         fontSize: '0.8em',
                                         fontWeight: 400,

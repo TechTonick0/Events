@@ -221,14 +221,66 @@ button {
 }
 
 /* Printer Friendly Mode (Applied temporarily during export) */
+/* Printer Friendly Mode (Applied temporarily during export) */
 .print-map {
   --bg-app: #ffffff !important;
   --text-primary: #000000 !important;
   --text-muted: #4b5563 !important;
   --glass-border: rgba(0, 0, 0, 0.2) !important;
   --glass-bg: rgba(255, 255, 255, 0.9) !important;
-  --grid-color: #e5e7eb !important;
-  /* Light Gray */
+  --grid-color: transparent !important;
+  /* Hide Grid */
+}
+
+.print-map polygon {
+  stroke: #000000 !important;
+}
+
+.print-map .glass-panel {
+  background: white !important;
+  border-color: #ccc !important;
+}
+
+/* Print Overrides for Table Labels */
+.print-map .map-table {
+  overflow: visible !important;
+  /* Allow label to pop out */
+}
+
+/* Bigger Table Number */
+.print-map .table-label {
+  font-size: 1.4em !important;
+  font-weight: 800 !important;
+  color: white !important;
+  /* Ensure visible on colored table */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Pop-out Vendor Name */
+.print-map .vendor-name {
+  position: absolute;
+  top: 105%;
+  /* Just below table */
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  color: black !important;
+  padding: 2px 6px;
+  border: 1px solid #000;
+  border-radius: 4px;
+  font-size: 14px !important;
+  /* Readable size */
+  font-weight: 600 !important;
+  width: max-content;
+  max-width: 150px;
+  /* Cap width */
+  z-index: 999;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: normal !important;
+  /* Allow wrapping */
+  text-align: center;
+  line-height: 1.1;
+  opacity: 1 !important;
 }
 
 .print-map polygon {
