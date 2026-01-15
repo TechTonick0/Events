@@ -257,7 +257,14 @@ button {
 }
 
 /* Pop-out Vendor Name */
+/* Pop-out Vendor Name (Hidden by default on full map) */
 .print-map .vendor-name {
+  display: none !important;
+}
+
+/* Show Labels ONLY when explicitly requested (Tenant View) */
+.print-map.with-labels .vendor-name {
+  display: block !important;
   position: absolute;
   top: 105%;
   /* Just below table */
