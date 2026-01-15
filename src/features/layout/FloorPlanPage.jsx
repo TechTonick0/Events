@@ -263,7 +263,8 @@ const FloorPlanPage = () => {
             pdf.setTextColor(80, 80, 80);
             if (type === 'tenant') {
                 const vName = vendors.find(v => v.id === vendorId)?.name;
-                pdf.text(`Vendor Map: ${vName}`, margin, margin + 45);
+                const vTables = tables.filter(t => t.vendorId === vendorId).map(t => t.label).join(', ');
+                pdf.text(`Vendor Map: ${vName} (${vTables})`, margin, margin + 45);
             } else {
                 pdf.text('Overall Floor Plan', margin, margin + 45);
             }
@@ -974,11 +975,7 @@ const FloorPlanPage = () => {
                                         pointerEvents: 'none',
                                         fontSize: '0.8em',
                                         fontWeight: 400,
-                                        opacity: 0.9,
-                                        maxWidth: '95%',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap'
+                                        opacity: 0.9
                                     }}>
                                         {vendors.find(v => v.id === table.vendorId)?.name}
                                     </span>
