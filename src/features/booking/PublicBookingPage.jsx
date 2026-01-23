@@ -30,47 +30,33 @@ const PublicBookingPage = () => {
     const roomWidth = (event?.settings?.width || 100) * PX_PER_FT;
     const roomHeight = (event?.settings?.height || 100) * PX_PER_FT;
 
-    // Auto-fit Logic (Zoom to Tables)
+    // Auto-fit Logic (Zoom to Room Boundary)
     useEffect(() => {
-        if (!event || !containerRef.current || tables.length === 0) return;
-        // ... (rest of logic uses 'tables')
+        if (!event || !containerRef.current) return;
 
         const fit = () => {
-            // 1. Calculate Bounding Box of Tables
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            if (!containerRef.current) return;
 
-            tables.forEach(t => {
-                minX = Math.min(minX, t.x);
-                minY = Math.min(minY, t.y);
-                maxX = Math.max(maxX, t.x + (t.width || 8));
-                maxY = Math.max(maxY, t.y + (t.height || 3));
-            });
-
-            // Add Padding (e.g. 5ft buffer)
-            const padding = 5;
-            minX -= padding;
-            minY -= padding;
-            maxX += padding;
-            maxY += padding;
-
-            const contentW = (maxX - minX) * PX_PER_FT;
-            const contentH = (maxY - minY) * PX_PER_FT;
+            // 1. Get Room Dimensions from Settings
+            // Default to 100x100 if missing (in PX)
+            const contentW = roomWidth;
+            const contentH = roomHeight;
 
             // 2. Measure Container
             const rect = containerRef.current.getBoundingClientRect();
             const availableW = rect.width;
             const availableH = rect.height;
 
-            // 3. Calculate Scale
+            // 3. Calculate Scale to Fit Room
+            // Add slight padding (e.g. 95% of screen)
             const scaleW = availableW / contentW;
             const scaleH = availableH / contentH;
-            const newScale = Math.min(scaleW, scaleH, 2); // Cap zoom at 2x to prevent huge tables
+            const newScale = Math.min(scaleW, scaleH) * 0.95;
 
-            // 4. Calculate Center Offset
-            // We want to translate the map so that the center of the bounding box is at the center of the container
-            // Current center of bbox in pixels:
-            const cx = (minX + (maxX - minX) / 2) * PX_PER_FT;
-            const cy = (minY + (maxY - minY) / 2) * PX_PER_FT;
+            // 4. Center the Room
+            // We want the room center (roomWidth/2, roomHeight/2) to be at screen center.
+            const cx = contentW / 2;
+            const cy = contentH / 2;
 
             setViewBox({ scale: newScale, x: cx, y: cy });
         };
@@ -78,7 +64,7 @@ const PublicBookingPage = () => {
         fit();
         window.addEventListener('resize', fit);
         return () => window.removeEventListener('resize', fit);
-    }, [event, tables.length]); // Re-run if tables change
+    }, [event, roomWidth, roomHeight]);
 
 
     if (!event) return <div style={{ padding: '40px', color: 'white' }}>Event not found.</div>;
@@ -136,7 +122,7 @@ const PublicBookingPage = () => {
                 <header style={{ padding: '16px 24px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h1 style={{ fontSize: '20px', fontWeight: 600 }}>{event.name}</h1>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Select your tables (v1.1)</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Select your tables (v1.2)</p>
                     </div>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         <div style={{ fontSize: '14px' }}>
