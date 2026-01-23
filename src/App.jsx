@@ -1,11 +1,40 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, NavLink, useLocation, useParams, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, DollarSign, FileSignature, ChevronLeft } from 'lucide-react';
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useParams, Navigate, Outlet } from 'react-router-dom';
+import { LayoutDashboard, Users, DollarSign, FileSignature, ChevronLeft, LogOut } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginPage from './features/auth/LoginPage';
 import EventsPage from './features/events/EventsPage';
 import FloorPlanPage from './features/layout/FloorPlanPage';
 import VendorsPage from './features/vendors/VendorsPage';
 import AccountingPage from './features/accounting/AccountingPage';
 import AgreementsPage from './features/agreements/AgreementsPage';
+import PublicBookingPage from './features/booking/PublicBookingPage';
+import Button from './components/ui/Button';
+
+// Protected Route Wrapper
+const RequireAuth = () => {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return <Outlet />;
+};
+
+// Admin Layout with Logout
+const AdminLayout = () => {
+  const { logout } = useAuth();
+  return (
+    <>
+      <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}>
+        <Button variant="ghost" size="sm" onClick={logout} icon={LogOut}>Logout</Button>
+      </div>
+      <Outlet />
+    </>
+  )
+}
 
 // Navigation Component (Context Aware)
 const EventNavigation = () => {
@@ -15,10 +44,10 @@ const EventNavigation = () => {
   if (!eventId) return null;
 
   const navItems = [
-    { path: `/events/${eventId}/layout`, icon: LayoutDashboard, label: 'Layout' },
-    { path: `/events/${eventId}/vendors`, icon: Users, label: 'Vendors' },
-    { path: `/events/${eventId}/accounting`, icon: DollarSign, label: 'Finance' },
-    { path: `/events/${eventId}/agreements`, icon: FileSignature, label: 'Legal' },
+    { path: `/admin/events/${eventId}/layout`, icon: LayoutDashboard, label: 'Layout' },
+    { path: `/admin/events/${eventId}/vendors`, icon: Users, label: 'Vendors' },
+    { path: `/admin/events/${eventId}/accounting`, icon: DollarSign, label: 'Finance' },
+    { path: `/admin/events/${eventId}/agreements`, icon: FileSignature, label: 'Legal' },
   ];
 
   return (
@@ -73,7 +102,7 @@ const EventHeader = () => {
       pointerEvents: 'none' // Let clicks pass through to page content mostly, but button needs events
     }}>
       <NavLink
-        to="/"
+        to="/admin/events"
         style={{
           pointerEvents: 'auto',
           display: 'flex', alignItems: 'center', gap: '4px',
@@ -91,23 +120,34 @@ const EventHeader = () => {
 
 function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <div className="app-shell">
-        <Routes>
-          <Route path="/" element={<EventsPage />} />
+    <AuthProvider>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <div className="app-shell">
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/book/:eventId" element={<PublicBookingPage />} />
 
-          {/* Event Routes */}
-          <Route path="/events/:eventId/layout" element={<><EventHeader /><FloorPlanPage /><EventNavigation /></>} />
-          <Route path="/events/:eventId/vendors" element={<><EventHeader /><VendorsPage /><EventNavigation /></>} />
-          <Route path="/events/:eventId/accounting" element={<><EventHeader /><AccountingPage /><EventNavigation /></>} />
-          <Route path="/events/:eventId/agreements" element={<><EventHeader /><AgreementsPage /><EventNavigation /></>} />
+            {/* Protected Admin Routes */}
+            <Route path="/admin" element={<RequireAuth />}>
+              <Route element={<AdminLayout />}>
+                <Route path="events" element={<EventsPage />} />
+                <Route path="events/:eventId/layout" element={<><EventHeader /><FloorPlanPage /><EventNavigation /></>} />
+                <Route path="events/:eventId/vendors" element={<><EventHeader /><VendorsPage /><EventNavigation /></>} />
+                <Route path="events/:eventId/accounting" element={<><EventHeader /><AccountingPage /><EventNavigation /></>} />
+                <Route path="events/:eventId/agreements" element={<><EventHeader /><AgreementsPage /><EventNavigation /></>} />
 
-          {/* Redirects/Fallbacks */}
-          <Route path="/events" element={<Navigate to="/" replace />} />
-          <Route path="/layout" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
-    </BrowserRouter>
+                {/* Default Admin Redirect */}
+                <Route index element={<Navigate to="events" replace />} />
+              </Route>
+            </Route>
+
+            {/* Root Redirect */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </div>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
