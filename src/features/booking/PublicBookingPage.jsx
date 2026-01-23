@@ -152,24 +152,50 @@ const PublicBookingPage = () => {
                 </header>
 
                 {/* Map View */}
-                <div style={{ flex: 1, position: 'relative', overflow: 'hidden', padding: '20px' }}>
+                <div style={{ flex: 1, position: 'relative', overflow: 'hidden', padding: '0', background: '#18181b' }}>
                     <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <div style={{
                             width: roomWidth,
                             height: roomHeight,
                             position: 'relative',
-                            background: 'white',
-                            transform: `scale(${scale})`,
-                            boxShadow: '0 0 40px rgba(0,0,0,0.5)'
+                            // Transform logic
+                            transform: `scale(${viewBox.scale}) translate(${-viewBox.x + (roomWidth / 2)}px, ${-viewBox.y + (roomHeight / 2)}px)`,
+                            transformOrigin: 'center center',
+                            boxShadow: '0 0 50px rgba(0,0,0,0.5)'
                         }}>
-                            {/* Grid/Context */}
-                            <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                            {/* Room Shape (Mask/Fill) */}
+                            <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
                                 <defs>
                                     <pattern id="grid" width={PX_PER_FT} height={PX_PER_FT} patternUnits="userSpaceOnUse">
-                                        <path d={`M ${PX_PER_FT} 0 L 0 0 0 ${PX_PER_FT}`} fill="none" stroke="#eee" strokeWidth="0.5" />
+                                        <path d={`M ${PX_PER_FT} 0 L 0 0 0 ${PX_PER_FT}`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
                                     </pattern>
+                                    {/* Mask to clip outside the room */}
+                                    <mask id="roomMask">
+                                        <rect width="100%" height="100%" fill="black" />
+                                        <path
+                                            d={event.settings?.boundary
+                                                ? `M ${event.settings.boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' L ')} Z`
+                                                : `M 0,0 L ${roomWidth},0 L ${roomWidth},${roomHeight} L 0,${roomHeight} Z`
+                                            }
+                                            fill="white"
+                                        />
+                                    </mask>
                                 </defs>
-                                <rect width="100%" height="100%" fill="url(#grid)" />
+
+                                {/* Background Fill (Clipped to Room) */}
+                                <rect width="100%" height="100%" fill="#27272a" mask="url(#roomMask)" />
+                                <rect width="100%" height="100%" fill="url(#grid)" mask="url(#roomMask)" />
+
+                                {/* Room Border */}
+                                <path
+                                    d={event.settings?.boundary
+                                        ? `M ${event.settings.boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' L ')} Z`
+                                        : `M 0,0 L ${roomWidth},0 L ${roomWidth},${roomHeight} L 0,${roomHeight} Z`
+                                    }
+                                    fill="none"
+                                    stroke="#52525b"
+                                    strokeWidth="2"
+                                />
                             </svg>
 
                             {/* Tables */}
@@ -177,7 +203,7 @@ const PublicBookingPage = () => {
                                 const isTaken = table.status === 'reserved' || table.status === 'occupied';
                                 const isSelected = selectedTableIds.includes(table.id);
                                 const zone = zones.find(z => z.id === table.zoneId);
-                                const color = isTaken ? '#ccc' : (isSelected ? 'var(--primary)' : (zone?.color || '#10b981')); // Green avail
+                                const color = isTaken ? '#3f3f46' : (isSelected ? 'var(--primary)' : (zone?.color || '#10b981')); // Green avail
 
                                 return (
                                     <div
@@ -190,15 +216,15 @@ const PublicBookingPage = () => {
                                             width: (table.width || 8) * PX_PER_FT,
                                             height: (table.height || 3) * PX_PER_FT,
                                             backgroundColor: color,
-                                            borderRadius: '4px',
+                                            borderRadius: '2px', // Sharper corners for tables
                                             cursor: isTaken ? 'not-allowed' : 'pointer',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            color: 'white', fontWeight: 600, fontSize: '10px',
+                                            color: isTaken ? '#71717a' : 'white', fontWeight: 600, fontSize: '10px',
                                             transition: 'transform 0.1s',
                                             transform: `rotate(${table.rotation || 0}deg)`,
-                                            border: isSelected ? '2px solid white' : 'none',
-                                            boxShadow: isSelected ? '0 0 0 2px var(--primary)' : '0 2px 4px rgba(0,0,0,0.1)',
-                                            opacity: isTaken ? 0.5 : 1
+                                            border: isSelected ? '2px solid white' : (isTaken ? '1px solid #27272a' : '1px solid rgba(0,0,0,0.2)'),
+                                            boxShadow: isSelected ? '0 0 10px var(--primary)' : 'none',
+                                            opacity: 1
                                         }}
                                     >
                                         {isTaken ? 'Taken' : table.label}
@@ -209,95 +235,94 @@ const PublicBookingPage = () => {
                     </div>
                 </div>
             </div>
-            </div >
         );
     }
 
-// Step 2: Vendor Info
-if (step === 2) {
-    return (
-        <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
-            <Button variant="ghost" onClick={() => setStep(1)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Map</Button>
-            <Card title="Vendor Details">
-                <div style={{ display: 'grid', gap: '16px' }}>
-                    <Input label="Business / Contact Name" value={vendorInfo.name} onChange={e => setVendorInfo({ ...vendorInfo, name: e.target.value })} autoFocus />
-                    <Input label="Email Address" value={vendorInfo.email} onChange={e => setVendorInfo({ ...vendorInfo, email: e.target.value })} type="email" />
-                    <Input label="Phone Number" value={vendorInfo.phone} onChange={e => setVendorInfo({ ...vendorInfo, phone: e.target.value })} type="tel" />
+    // Step 2: Vendor Info
+    if (step === 2) {
+        return (
+            <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
+                <Button variant="ghost" onClick={() => setStep(1)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Map</Button>
+                <Card title="Vendor Details">
+                    <div style={{ display: 'grid', gap: '16px' }}>
+                        <Input label="Business / Contact Name" value={vendorInfo.name} onChange={e => setVendorInfo({ ...vendorInfo, name: e.target.value })} autoFocus />
+                        <Input label="Email Address" value={vendorInfo.email} onChange={e => setVendorInfo({ ...vendorInfo, email: e.target.value })} type="email" />
+                        <Input label="Phone Number" value={vendorInfo.phone} onChange={e => setVendorInfo({ ...vendorInfo, phone: e.target.value })} type="tel" />
 
-                    <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                        <Button
-                            variant="primary"
-                            disabled={!vendorInfo.name || !vendorInfo.email}
-                            onClick={() => setStep(3)}
-                            icon={ChevronRight}
-                        >
-                            Review & Pay
-                        </Button>
+                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                            <Button
+                                variant="primary"
+                                disabled={!vendorInfo.name || !vendorInfo.email}
+                                onClick={() => setStep(3)}
+                                icon={ChevronRight}
+                            >
+                                Review & Pay
+                            </Button>
+                        </div>
                     </div>
-                </div>
-            </Card>
+                </Card>
+            </div>
+        );
+    }
+
+    // Step 3: Checkout
+    if (step === 3) {
+        return (
+            <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
+                <Button variant="ghost" onClick={() => setStep(2)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Details</Button>
+                <Card>
+                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Confirm Booking</h2>
+                        <p style={{ color: 'var(--text-secondary)' }}>You are booking {selectedTableIds.length} tables.</p>
+                    </div>
+
+                    <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>Tables ({selectedTableIds.length})</span>
+                            <span>$100.00</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                            {/* Mock Price calculation logic could go here */}
+                            <span>(Mock Price: Fixed Demo Rate)</span>
+                        </div>
+                        <div style={{ height: '1px', background: 'var(--glass-border)', margin: '16px 0' }}></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '18px' }}>
+                            <span>Total</span>
+                            <span>$100.00</span>
+                        </div>
+                    </div>
+
+                    <Button
+                        variant="primary"
+                        size="lg"
+                        style={{ width: '100%', justifyContent: 'center' }}
+                        onClick={handleBooking}
+                        disabled={isProcessing}
+                    >
+                        {isProcessing ? 'Processing...' : `Pay $100.00`}
+                    </Button>
+                    <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
+                        <CreditCard size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                        Secure Payment processed by Stripe (Demo)
+                    </p>
+                </Card>
+            </div>
+        );
+    }
+
+    // Success
+    return (
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '20px', textAlign: 'center' }}>
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+                <CheckCircle size={40} color="white" />
+            </div>
+            <h1 className="text-gradient">Booking Confirmed!</h1>
+            <p style={{ color: 'var(--text-secondary)', maxWidth: '400px', margin: '16px auto' }}>
+                Thank you, {vendorInfo.name}. Your tables have been reserved. A confirmation email has been sent to {vendorInfo.email}.
+            </p>
+            <Button variant="outline" onClick={() => window.location.reload()}>Book Another</Button>
         </div>
     );
-}
-
-// Step 3: Checkout
-if (step === 3) {
-    return (
-        <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
-            <Button variant="ghost" onClick={() => setStep(2)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Details</Button>
-            <Card>
-                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                    <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Confirm Booking</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>You are booking {selectedTableIds.length} tables.</p>
-                </div>
-
-                <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span>Tables ({selectedTableIds.length})</span>
-                        <span>$100.00</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {/* Mock Price calculation logic could go here */}
-                        <span>(Mock Price: Fixed Demo Rate)</span>
-                    </div>
-                    <div style={{ height: '1px', background: 'var(--glass-border)', margin: '16px 0' }}></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '18px' }}>
-                        <span>Total</span>
-                        <span>$100.00</span>
-                    </div>
-                </div>
-
-                <Button
-                    variant="primary"
-                    size="lg"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={handleBooking}
-                    disabled={isProcessing}
-                >
-                    {isProcessing ? 'Processing...' : `Pay $100.00`}
-                </Button>
-                <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
-                    <CreditCard size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                    Secure Payment processed by Stripe (Demo)
-                </p>
-            </Card>
-        </div>
-    );
-}
-
-// Success
-return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '20px', textAlign: 'center' }}>
-        <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-            <CheckCircle size={40} color="white" />
-        </div>
-        <h1 className="text-gradient">Booking Confirmed!</h1>
-        <p style={{ color: 'var(--text-secondary)', maxWidth: '400px', margin: '16px auto' }}>
-            Thank you, {vendorInfo.name}. Your tables have been reserved. A confirmation email has been sent to {vendorInfo.email}.
-        </p>
-        <Button variant="outline" onClick={() => window.location.reload()}>Book Another</Button>
-    </div>
-);
 };
 
 export default PublicBookingPage;
