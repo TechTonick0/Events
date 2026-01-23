@@ -67,7 +67,7 @@ const LandingPage = () => {
             </div>
 
             <footer style={{ marginTop: 'auto', padding: '40px', color: 'var(--text-muted)', fontSize: '12px' }}>
-                &copy; {new Date().getFullYear()} EventHub Platform
+                &copy; {new Date().getFullYear()} EventHub Platform (v1.1)
             </footer>
         </div>
     );
