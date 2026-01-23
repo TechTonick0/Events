@@ -134,7 +134,7 @@ const PublicBookingPage = () => {
                 <header style={{ padding: '16px 24px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h1 style={{ fontSize: '20px', fontWeight: 600 }}>{event.name}</h1>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Select your tables</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Select your tables (v1.1)</p>
                     </div>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         <div style={{ fontSize: '14px' }}>
