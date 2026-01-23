@@ -118,7 +118,7 @@ const EventsPage = () => {
                         key={event.id}
                         className="event-card"
                         style={{ cursor: 'pointer', transition: 'transform 0.2s', borderLeft: '4px solid var(--primary)' }}
-                        onClick={() => navigate(`/events/${event.id}/layout`)}
+                        onClick={() => navigate(`/admin/events/${event.id}/layout`)}
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
