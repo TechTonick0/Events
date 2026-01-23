@@ -24,9 +24,16 @@ const PublicBookingPage = () => {
     const containerRef = useRef(null);
     const [viewBox, setViewBox] = useState({ scale: 1, x: 0, y: 0 });
 
+    // Defined BEFORE useEffect to avoid ReferenceError
+    const tables = event?.tables || [];
+    const zones = event?.zones || [];
+    const roomWidth = (event?.settings?.width || 100) * PX_PER_FT;
+    const roomHeight = (event?.settings?.height || 100) * PX_PER_FT;
+
     // Auto-fit Logic (Zoom to Tables)
     useEffect(() => {
         if (!event || !containerRef.current || tables.length === 0) return;
+        // ... (rest of logic uses 'tables')
 
         const fit = () => {
             // 1. Calculate Bounding Box of Tables
@@ -75,11 +82,6 @@ const PublicBookingPage = () => {
 
 
     if (!event) return <div style={{ padding: '40px', color: 'white' }}>Event not found.</div>;
-
-    const tables = event.tables || [];
-    const zones = event.zones || [];
-    const roomWidth = (event.settings?.width || 100) * PX_PER_FT;
-    const roomHeight = (event.settings?.height || 100) * PX_PER_FT;
 
     // Helpers
     const toggleTable = (id) => {
