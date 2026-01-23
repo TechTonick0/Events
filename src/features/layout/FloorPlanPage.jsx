@@ -62,10 +62,14 @@ const FloorPlanPage = () => {
     const [pan, setPan] = useState({ x: 0, y: 0 });
 
     // Interaction State
-    const [selectedTableId, setSelectedTableId] = useState(null);
     const [showEventSettings, setShowEventSettings] = useState(false);
     const [isDraggingTable, setIsDraggingTable] = useState(false);
     const [isPanning, setIsPanning] = useState(false);
+
+    // Selection State
+    const [selectedTableIds, setSelectedTableIds] = useState([]);
+    const [selectionBox, setSelectionBox] = useState(null); // { startX, startY, currentX, currentY }
+    const [isBoxSelecting, setIsBoxSelecting] = useState(false);
 
     const [isZooming, setIsZooming] = useState(false); // For Pinch Zoom
     const [isRoomEditing, setIsRoomEditing] = useState(false); // New Edit Mode
@@ -78,15 +82,18 @@ const FloorPlanPage = () => {
     const panRef = useRef({ x: 0, y: 0 });
     const isDraggingTableRef = useRef(false); // Validates drag state synchronously
     const draggingTableIdRef = useRef(null); // Track WHICH table is dragging synchronously
+    const selectedTableIdsRef = useRef([]); // Sync Ref
 
     // Sync Refs with State
     useEffect(() => {
         scaleRef.current = scale;
         panRef.current = pan;
-    }, [scale, pan]);
+        selectedTableIdsRef.current = selectedTableIds;
+    }, [scale, pan, selectedTableIds]);
 
     const dragStart = useRef({ x: 0, y: 0 });
-    const initialObjPos = useRef({ x: 0, y: 0 });
+    const initialObjPos = useRef({ x: 0, y: 0 }); // Primary object
+    const initialSelectedPositions = useRef({}); // Map of { id: {x,y} } for all selected
     const hasMoved = useRef(false);
     const lastTouchDistance = useRef(null); // For Pinch
     const containerRef = useRef(null);
@@ -369,14 +376,11 @@ const FloorPlanPage = () => {
         updateEventSettings({ boundary: newBoundary });
     };
 
-    const getSelectedTable = () => tables.find(t => t.id === selectedTableId);
-
-
+    const getSelectedTables = () => tables.filter(t => selectedTableIds.includes(t.id));
 
     const updateTable = (id, updates) => {
         const newTables = tables.map(t => {
             if (t.id === id) {
-                // Don't overwrite label with vendor name anymore. Use separate display.
                 return { ...t, ...updates };
             }
             return t;
@@ -384,9 +388,15 @@ const FloorPlanPage = () => {
         updateEventTables(newTables);
     };
 
-    const updateSelectedTable = (updates) => {
-        if (!selectedTableId) return;
-        updateTable(selectedTableId, updates);
+    const updateSelectedTables = (updates) => {
+        if (selectedTableIds.length === 0) return;
+        const newTables = tables.map(t => {
+            if (selectedTableIds.includes(t.id)) {
+                return { ...t, ...updates };
+            }
+            return t;
+        });
+        updateEventTables(newTables);
     };
 
     const addTable = () => {
@@ -420,22 +430,30 @@ const FloorPlanPage = () => {
         newTable.y = Math.round(newTable.y);
 
         updateEventTables([...tables, newTable]);
-        setSelectedTableId(newTable.id);
+        setSelectedTableIds([newTable.id]);
         setShowEventSettings(false);
     };
 
     const deleteTable = () => {
-        if (!selectedTableId) return;
-        updateEventTables(tables.filter(t => t.id !== selectedTableId));
-        setSelectedTableId(null);
+        if (selectedTableIds.length === 0) return;
+        if (!window.confirm(`Delete ${selectedTableIds.length} tables?`)) return;
+        updateEventTables(tables.filter(t => !selectedTableIds.includes(t.id)));
+        setSelectedTableIds([]);
     };
 
     const rotateTable = () => {
-        const t = getSelectedTable();
-        if (!t) return;
-        const newW = t.height || DEFAULT_TABLE_H_FT;
-        const newH = t.width || DEFAULT_TABLE_W_FT;
-        updateSelectedTable({ width: newW, height: newH });
+        // Rotate all selected tables
+        if (selectedTableIds.length === 0) return;
+
+        const newTables = tables.map(t => {
+            if (selectedTableIds.includes(t.id)) {
+                const newW = t.height || DEFAULT_TABLE_H_FT;
+                const newH = t.width || DEFAULT_TABLE_W_FT;
+                return { ...t, width: newW, height: newH };
+            }
+            return t;
+        });
+        updateEventTables(newTables);
     };
 
     const deleteEvent = () => {
@@ -511,8 +529,25 @@ const FloorPlanPage = () => {
         setIsDraggingTable(true);
         isDraggingTableRef.current = true; // Sync update
 
-        // Track Drag Target separate from Selection
-        // Don't set selectedTableId here.
+        // Multi-Select Logic
+        let currentSelection = selectedTableIds;
+        if (!selectedTableIds.includes(table.id)) {
+            setSelectedTableIds([table.id]);
+            currentSelection = [table.id];
+        } else {
+            currentSelection = selectedTableIds; // Keep existing group
+        }
+
+        // Snapshot positions for ALL selected tables
+        const posMap = {};
+        tables.forEach(t => {
+            if (currentSelection.includes(t.id)) {
+                posMap[t.id] = { x: t.x, y: t.y };
+            }
+        });
+        initialSelectedPositions.current = posMap;
+
+        // Track the "Primary" drag target for offset ref
         draggingTableIdRef.current = table.id;
 
         setShowEventSettings(false); // Close settings panel on start (optional preference)
@@ -523,10 +558,10 @@ const FloorPlanPage = () => {
     };
 
     const handleCanvasDown = (e) => {
+        // Handle Mobile Pinch/Pan (2 fingers)
         if (e.touches && e.touches.length === 2) {
-            // Pinch Start
             setIsZooming(true);
-            setIsPanning(false);
+            setIsPanning(false); // Pinch handles pan too usually, but let's keep separate for now
             setIsDraggingTable(false);
             isDraggingTableRef.current = false;
             lastTouchDistance.current = getTouchDistance(e.touches);
@@ -535,7 +570,29 @@ const FloorPlanPage = () => {
 
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        setIsPanning(true);
+
+        // Determine Action
+        // Right Click (2) OR Middle Click (1) -> Pan
+        // Left Click (0) -> Box Select (if on background)
+        const isRightClick = e.button === 2 || e.button === 1;
+        const isTouchPan = e.touches && e.touches.length === 2; // Handled above, but just in case
+
+        if (isRightClick || isTouchPan) {
+            setIsPanning(true);
+            setIsBoxSelecting(false);
+        } else {
+            // Left Click / Single Touch -> Box Select
+            // Only if NOT clicking a table (handled by handleTableDown propagation stop)
+            setIsBoxSelecting(true);
+            setIsPanning(false);
+            setSelectionBox({ startX: clientX, startY: clientY, currentX: clientX, currentY: clientY });
+
+            // Clear selection on start of new box select (unless Shift?)
+            if (!e.shiftKey) {
+                setSelectedTableIds([]);
+            }
+        }
+
         hasMoved.current = false;
         dragStart.current = { x: clientX, y: clientY };
         initialObjPos.current = { x: pan.x, y: pan.y };
@@ -593,6 +650,13 @@ const FloorPlanPage = () => {
             return;
         }
 
+        if (isBoxSelecting) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            setSelectionBox(prev => ({ ...prev, currentX: clientX, currentY: clientY }));
+            return;
+        }
+
         if (!isDraggingTableRef.current && !isPanning && draggingVertexIndex === null) return;
 
         if (e.touches && e.touches.length > 1) return; // Don't pan if multi-touch
@@ -602,7 +666,6 @@ const FloorPlanPage = () => {
         const deltaPxX = clientX - dragStart.current.x;
         const deltaPxY = clientY - dragStart.current.y;
 
-        if (Math.abs(deltaPxX) > 2 || Math.abs(deltaPxY) > 2) hasMoved.current = true;
         if (Math.abs(deltaPxX) > 2 || Math.abs(deltaPxY) > 2) hasMoved.current = true;
 
         if (draggingVertexIndex !== null) {
@@ -651,15 +714,6 @@ const FloorPlanPage = () => {
             newBoundary[draggingVertexIndex] = { x: newX, y: newY };
             updateEventSettings({ boundary: newBoundary });
             return; // Done
-        } else if (isDraggingTableRef.current && draggingTableIdRef.current) {
-            e.preventDefault(); // Stop scroll when dragging table
-            const t = tables.find(t => t.id === draggingTableIdRef.current);
-            const w = t.width || DEFAULT_TABLE_W_FT;
-            const h = t.height || DEFAULT_TABLE_H_FT;
-
-            const deltaFtX = (deltaPxX / scale) / PX_PER_FT;
-            const deltaFtY = (deltaPxY / scale) / PX_PER_FT;
-
             let newX = initialObjPos.current.x + deltaFtX;
             let newY = initialObjPos.current.y + deltaFtY;
 
@@ -693,11 +747,43 @@ const FloorPlanPage = () => {
             // selectedTableId remains whatever it was (or null).
         }
 
+        if (isBoxSelecting && selectionBox) {
+            const boxX = Math.min(selectionBox.startX, selectionBox.currentX);
+            const boxY = Math.min(selectionBox.startY, selectionBox.currentY);
+            const boxW = Math.abs(selectionBox.currentX - selectionBox.startX);
+            const boxH = Math.abs(selectionBox.currentY - selectionBox.startY);
+
+            const newSelection = [];
+            tables.forEach(t => {
+                // Table Screen Coords
+                const tx = (t.x * PX_PER_FT * scale) + pan.x;
+                const ty = (t.y * PX_PER_FT * scale) + pan.y;
+                const tw = (t.width || DEFAULT_TABLE_W_FT) * PX_PER_FT * scale;
+                const th = (t.height || DEFAULT_TABLE_H_FT) * PX_PER_FT * scale;
+
+                const overlaps = (
+                    tx < boxX + boxW &&
+                    tx + tw > boxX &&
+                    ty < boxY + boxH &&
+                    ty + th > boxY
+                );
+
+                if (overlaps) newSelection.push(t.id);
+            });
+
+            if (newSelection.length > 0) {
+                // Determine Logic: Shift to Add? Default Replace.
+                setSelectedTableIds(newSelection);
+            }
+        }
+
         setIsDraggingTable(false);
         isDraggingTableRef.current = false;
         draggingTableIdRef.current = null;
         setIsPanning(false);
         setIsZooming(false);
+        setIsBoxSelecting(false);
+        setSelectionBox(null);
         setDraggingVertexIndex(null); // Stop vertex drag
         setSnapLines([]); // Clear guides
         lastTouchDistance.current = null;
@@ -997,7 +1083,7 @@ const FloorPlanPage = () => {
                 >
                     {tables.map(table => {
                         if (isRoomEditing) return null; // Hide tables while editing room
-                        const isSelected = selectedTableId === table.id;
+                        const isSelected = selectedTableIds.includes(table.id);
                         const wFt = table.width || DEFAULT_TABLE_W_FT;
                         const hFt = table.height || DEFAULT_TABLE_H_FT;
                         const isVertical = hFt > wFt;
@@ -1014,17 +1100,16 @@ const FloorPlanPage = () => {
                                     top: table.y * PX_PER_FT,
                                     width: wFt * PX_PER_FT,
                                     height: hFt * PX_PER_FT,
-                                    backgroundColor: getStatusColor(table.status, isSelected), // Always show status fill
-                                    border: table.zoneId
-                                        ? `3px solid ${zones.find(z => z.id === table.zoneId)?.color || 'white'}` // Zone Border
-                                        : `1px solid ${isSelected ? 'var(--text-primary)' : 'rgba(255,255,255,0.2)'}`, // Default Border
+                                    backgroundColor: isSelected ? 'var(--primary)' : (table.status === 'occupied' ? '#ef4444' : (zones.find(z => z.id === table.zoneId)?.color || '#10b981')),
+                                    border: isSelected ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexDirection: 'column',
-                                    color: 'white', // Reverted to white per user request
+                                    color: 'white',
                                     fontSize: Math.max(10, 10 / scale) + 'px', fontWeight: 600, cursor: 'grab',
                                     boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
                                     zIndex: isSelected ? 100 : 1, userSelect: 'none',
-                                    textAlign: 'center', lineHeight: 1.2
+                                    textAlign: 'center', lineHeight: 1.2,
+                                    transition: isDraggingTableRef.current ? 'none' : 'transform 0.1s'
                                 }}
                             >
                                 <span className="table-label" style={{ pointerEvents: 'none' }}>{table.label}</span>
@@ -1041,6 +1126,21 @@ const FloorPlanPage = () => {
                             </div>
                         );
                     })}
+
+                    {/* Selection Box Overlay */}
+                    {isBoxSelecting && selectionBox && (
+                        <div style={{
+                            position: 'fixed', // Fixed to screen, not scaled map space
+                            left: Math.min(selectionBox.startX, selectionBox.currentX),
+                            top: Math.min(selectionBox.startY, selectionBox.currentY),
+                            width: Math.abs(selectionBox.currentX - selectionBox.startX),
+                            height: Math.abs(selectionBox.currentY - selectionBox.startY),
+                            border: '1px solid var(--primary)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            pointerEvents: 'none',
+                            zIndex: 9999
+                        }} />
+                    )}
                 </div>
             </div>
 
@@ -1070,57 +1170,28 @@ const FloorPlanPage = () => {
                             label="Label"
                             value={selectedTable.label}
                             onChange={(e) => updateSelectedTable({ label: e.target.value })}
-                        />
+                            {/* Single: Label */}
+                            {selectedTableIds.length === 1 && (() => {
+                                const t = getSelectedTables()[0];
+                                if (!t) return null;
+                                return (
+                                    <Input
+                                        label="Label (T-00)"
+                                        value={t.label}
+                                        onChange={(e) => updateTable(t.id, { label: e.target.value })}
+                                    />
+                                );
+                            })()}
 
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            <Input
-                                label="Width (ft)" type="number"
-                                value={selectedTable.width || DEFAULT_TABLE_W_FT}
-                                onChange={(e) => updateSelectedTable({ width: parseInt(e.target.value) || DEFAULT_TABLE_W_FT })}
-                            />
-                            <Input
-                                label="Height (ft)" type="number"
-                                value={selectedTable.height || DEFAULT_TABLE_H_FT}
-                                onChange={(e) => updateSelectedTable({ height: parseInt(e.target.value) || DEFAULT_TABLE_H_FT })}
-                            />
-                        </div>
-
-                        <div>
-                            <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Status</label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                {['available', 'booked', 'paid'].map(status => (
-                                    <button
-                                        key={status}
-                                        onClick={() => updateSelectedTable({ status })}
-                                        style={{
-                                            padding: '6px 10px', fontSize: '12px', borderRadius: 'var(--radius-sm)',
-                                            border: selectedTable.status === status ? `1px solid var(--primary)` : '1px solid var(--glass-border)',
-                                            background: selectedTable.status === status ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-                                            color: selectedTable.status === status ? 'var(--primary)' : 'var(--text-muted)',
-                                            textTransform: 'capitalize', flex: 1
-                                        }}
-                                    >
-                                        {status}
-                                    </button>
-                                ))}
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Size (ft)</label>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                    <button className="btn-ghost" style={{ flex: 1, border: '1px solid var(--glass-border)' }} onClick={() => updateSelectedTables({ width: 8, height: 3 })}>8x3</button>
+                                    <button className="btn-ghost" style={{ flex: 1, border: '1px solid var(--glass-border)' }} onClick={() => updateSelectedTables({ width: 6, height: 2.5 })}>6x2.5</button>
+                                </div>
                             </div>
-                        </div>
-
-                        <div style={{ marginBottom: 'auto' }}>
-                            <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Vendor</label>
-                            <select
-                                value={selectedTable.vendorId || ''}
-                                onChange={(e) => updateSelectedTable({ vendorId: e.target.value })}
-                                style={{
-                                    width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
-                                    padding: '10px', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none'
-                                }}
-                            >
-                                <option value="">(None)</option>
-                                {vendors.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
-                            </select>
+                            <Button variant="outline" onClick={rotateTable} icon={RotateCcw} title="Rotate">Rotate</Button>
                         </div>
 
                         {/* Zone Assignment */}
@@ -1128,10 +1199,10 @@ const FloorPlanPage = () => {
                             <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Zone</label>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                 <button
-                                    onClick={() => updateSelectedTable({ zoneId: null })}
+                                    onClick={() => updateSelectedTables({ zoneId: null })}
                                     style={{
                                         padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
-                                        border: !selectedTable.zoneId ? '1px solid white' : '1px solid var(--glass-border)',
+                                        border: '1px solid var(--glass-border)',
                                         background: 'transparent', color: 'white'
                                     }}
                                 >
@@ -1140,10 +1211,10 @@ const FloorPlanPage = () => {
                                 {zones.map(z => (
                                     <button
                                         key={z.id}
-                                        onClick={() => updateSelectedTable({ zoneId: z.id })}
+                                        onClick={() => updateSelectedTables({ zoneId: z.id })}
                                         style={{
                                             padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
-                                            border: selectedTable.zoneId === z.id ? '1px solid white' : '1px solid transparent',
+                                            border: '1px solid transparent',
                                             background: z.color, color: 'white'
                                         }}
                                     >
@@ -1153,11 +1224,10 @@ const FloorPlanPage = () => {
                             </div>
                         </div>
 
-                        <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete Table</Button>
+                        <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete {selectedTableIds.length > 1 ? 'Tables' : 'Table'}</Button>
                     </div>
                 </div>
-            )
-            }
+            )}
 
             {/* Zone Manager Panel */}
             {
