@@ -9,6 +9,7 @@ import VendorsPage from './features/vendors/VendorsPage';
 import AccountingPage from './features/accounting/AccountingPage';
 import AgreementsPage from './features/agreements/AgreementsPage';
 import PublicBookingPage from './features/booking/PublicBookingPage';
+import LandingPage from './features/dashboard/LandingPage';
 import Button from './components/ui/Button';
 
 // Protected Route Wrapper
@@ -125,6 +126,7 @@ function App() {
         <div className="app-shell">
           <Routes>
             {/* Public Routes */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/book/:eventId" element={<PublicBookingPage />} />
 
@@ -142,8 +144,7 @@ function App() {
               </Route>
             </Route>
 
-            {/* Root Redirect */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Root Redirect removed */}
           </Routes>
         </div>
       </BrowserRouter>
