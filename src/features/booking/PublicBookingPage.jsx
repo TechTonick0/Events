@@ -22,27 +22,56 @@ const PublicBookingPage = () => {
 
     // Map Logic
     const containerRef = useRef(null);
-    const [scale, setScale] = useState(1);
+    const [viewBox, setViewBox] = useState({ scale: 1, x: 0, y: 0 });
 
-    // Auto-fit Logic
+    // Auto-fit Logic (Zoom to Tables)
     useEffect(() => {
-        if (!event || !containerRef.current) return;
-        const widthFt = event.settings?.width || 100;
-        const heightFt = event.settings?.height || 100;
+        if (!event || !containerRef.current || tables.length === 0) return;
 
         const fit = () => {
+            // 1. Calculate Bounding Box of Tables
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            tables.forEach(t => {
+                minX = Math.min(minX, t.x);
+                minY = Math.min(minY, t.y);
+                maxX = Math.max(maxX, t.x + (t.width || 8));
+                maxY = Math.max(maxY, t.y + (t.height || 3));
+            });
+
+            // Add Padding (e.g. 5ft buffer)
+            const padding = 5;
+            minX -= padding;
+            minY -= padding;
+            maxX += padding;
+            maxY += padding;
+
+            const contentW = (maxX - minX) * PX_PER_FT;
+            const contentH = (maxY - minY) * PX_PER_FT;
+
+            // 2. Measure Container
             const rect = containerRef.current.getBoundingClientRect();
-            const availableW = rect.width - 40;
-            const availableH = rect.height - 40;
-            const contentW = widthFt * PX_PER_FT;
-            const contentH = heightFt * PX_PER_FT;
-            const s = Math.min(availableW / contentW, availableH / contentH);
-            setScale(s * 0.9); // 90% fit
+            const availableW = rect.width;
+            const availableH = rect.height;
+
+            // 3. Calculate Scale
+            const scaleW = availableW / contentW;
+            const scaleH = availableH / contentH;
+            const newScale = Math.min(scaleW, scaleH, 2); // Cap zoom at 2x to prevent huge tables
+
+            // 4. Calculate Center Offset
+            // We want to translate the map so that the center of the bounding box is at the center of the container
+            // Current center of bbox in pixels:
+            const cx = (minX + (maxX - minX) / 2) * PX_PER_FT;
+            const cy = (minY + (maxY - minY) / 2) * PX_PER_FT;
+
+            setViewBox({ scale: newScale, x: cx, y: cy });
         };
+
         fit();
         window.addEventListener('resize', fit);
         return () => window.removeEventListener('resize', fit);
-    }, [event]);
+    }, [event, tables.length]); // Re-run if tables change
 
 
     if (!event) return <div style={{ padding: '40px', color: 'white' }}>Event not found.</div>;
@@ -180,94 +209,95 @@ const PublicBookingPage = () => {
                     </div>
                 </div>
             </div>
+            </div >
         );
     }
 
-    // Step 2: Vendor Info
-    if (step === 2) {
-        return (
-            <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
-                <Button variant="ghost" onClick={() => setStep(1)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Map</Button>
-                <Card title="Vendor Details">
-                    <div style={{ display: 'grid', gap: '16px' }}>
-                        <Input label="Business / Contact Name" value={vendorInfo.name} onChange={e => setVendorInfo({ ...vendorInfo, name: e.target.value })} autoFocus />
-                        <Input label="Email Address" value={vendorInfo.email} onChange={e => setVendorInfo({ ...vendorInfo, email: e.target.value })} type="email" />
-                        <Input label="Phone Number" value={vendorInfo.phone} onChange={e => setVendorInfo({ ...vendorInfo, phone: e.target.value })} type="tel" />
-
-                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                            <Button
-                                variant="primary"
-                                disabled={!vendorInfo.name || !vendorInfo.email}
-                                onClick={() => setStep(3)}
-                                icon={ChevronRight}
-                            >
-                                Review & Pay
-                            </Button>
-                        </div>
-                    </div>
-                </Card>
-            </div>
-        );
-    }
-
-    // Step 3: Checkout
-    if (step === 3) {
-        return (
-            <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
-                <Button variant="ghost" onClick={() => setStep(2)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Details</Button>
-                <Card>
-                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Confirm Booking</h2>
-                        <p style={{ color: 'var(--text-secondary)' }}>You are booking {selectedTableIds.length} tables.</p>
-                    </div>
-
-                    <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span>Tables ({selectedTableIds.length})</span>
-                            <span>$100.00</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                            {/* Mock Price calculation logic could go here */}
-                            <span>(Mock Price: Fixed Demo Rate)</span>
-                        </div>
-                        <div style={{ height: '1px', background: 'var(--glass-border)', margin: '16px 0' }}></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '18px' }}>
-                            <span>Total</span>
-                            <span>$100.00</span>
-                        </div>
-                    </div>
-
-                    <Button
-                        variant="primary"
-                        size="lg"
-                        style={{ width: '100%', justifyContent: 'center' }}
-                        onClick={handleBooking}
-                        disabled={isProcessing}
-                    >
-                        {isProcessing ? 'Processing...' : `Pay $100.00`}
-                    </Button>
-                    <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
-                        <CreditCard size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                        Secure Payment processed by Stripe (Demo)
-                    </p>
-                </Card>
-            </div>
-        );
-    }
-
-    // Success
+// Step 2: Vendor Info
+if (step === 2) {
     return (
-        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '20px', textAlign: 'center' }}>
-            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <CheckCircle size={40} color="white" />
-            </div>
-            <h1 className="text-gradient">Booking Confirmed!</h1>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '400px', margin: '16px auto' }}>
-                Thank you, {vendorInfo.name}. Your tables have been reserved. A confirmation email has been sent to {vendorInfo.email}.
-            </p>
-            <Button variant="outline" onClick={() => window.location.reload()}>Book Another</Button>
+        <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
+            <Button variant="ghost" onClick={() => setStep(1)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Map</Button>
+            <Card title="Vendor Details">
+                <div style={{ display: 'grid', gap: '16px' }}>
+                    <Input label="Business / Contact Name" value={vendorInfo.name} onChange={e => setVendorInfo({ ...vendorInfo, name: e.target.value })} autoFocus />
+                    <Input label="Email Address" value={vendorInfo.email} onChange={e => setVendorInfo({ ...vendorInfo, email: e.target.value })} type="email" />
+                    <Input label="Phone Number" value={vendorInfo.phone} onChange={e => setVendorInfo({ ...vendorInfo, phone: e.target.value })} type="tel" />
+
+                    <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button
+                            variant="primary"
+                            disabled={!vendorInfo.name || !vendorInfo.email}
+                            onClick={() => setStep(3)}
+                            icon={ChevronRight}
+                        >
+                            Review & Pay
+                        </Button>
+                    </div>
+                </div>
+            </Card>
         </div>
     );
+}
+
+// Step 3: Checkout
+if (step === 3) {
+    return (
+        <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
+            <Button variant="ghost" onClick={() => setStep(2)} icon={ChevronLeft} style={{ marginBottom: '20px' }}>Back to Details</Button>
+            <Card>
+                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                    <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Confirm Booking</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>You are booking {selectedTableIds.length} tables.</p>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span>Tables ({selectedTableIds.length})</span>
+                        <span>$100.00</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                        {/* Mock Price calculation logic could go here */}
+                        <span>(Mock Price: Fixed Demo Rate)</span>
+                    </div>
+                    <div style={{ height: '1px', background: 'var(--glass-border)', margin: '16px 0' }}></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '18px' }}>
+                        <span>Total</span>
+                        <span>$100.00</span>
+                    </div>
+                </div>
+
+                <Button
+                    variant="primary"
+                    size="lg"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={handleBooking}
+                    disabled={isProcessing}
+                >
+                    {isProcessing ? 'Processing...' : `Pay $100.00`}
+                </Button>
+                <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
+                    <CreditCard size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                    Secure Payment processed by Stripe (Demo)
+                </p>
+            </Card>
+        </div>
+    );
+}
+
+// Success
+return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '20px', textAlign: 'center' }}>
+        <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+            <CheckCircle size={40} color="white" />
+        </div>
+        <h1 className="text-gradient">Booking Confirmed!</h1>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '400px', margin: '16px auto' }}>
+            Thank you, {vendorInfo.name}. Your tables have been reserved. A confirmation email has been sent to {vendorInfo.email}.
+        </p>
+        <Button variant="outline" onClick={() => window.location.reload()}>Book Another</Button>
+    </div>
+);
 };
 
 export default PublicBookingPage;
