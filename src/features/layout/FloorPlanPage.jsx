@@ -25,9 +25,21 @@ const FloorPlanPage = () => {
     // Derived State
     const eventIndex = events.findIndex(e => e.id === eventId);
     const event = events[eventIndex];
+
+    if (!event) {
+        return (
+            <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <h2>Event Not Found</h2>
+                    <Button variant="ghost" onClick={() => navigate('/admin/events')} icon={ArrowLeft}>Back to Events</Button>
+                </div>
+            </div>
+        );
+    }
+
     const tables = event?.tables || [];
     const vendors = event?.vendors || [];
-    const zones = event?.zones || []; // New: Zones Array { id, name, color, price }
+    const zones = event?.zones || [];
 
     // stored in Feet
     const roomWidthFt = event?.settings?.width || 100;
