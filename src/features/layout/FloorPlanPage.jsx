@@ -1006,78 +1006,107 @@ const FloorPlanPage = () => {
                 margin: 0 // Override index.css margin
             }}
         >
-            {/* Toolbar */}
-            <div className="glass-panel" style={{
-                padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                borderBottom: '1px solid var(--glass-border)', zIndex: 20, flexShrink: 0
+            {/* Context Aware Top Bar */}
+            <div style={{
+                height: '64px',
+                padding: '0 16px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                backgroundColor: 'var(--bg-app)', // Solid background to hide global nav
+                borderBottom: '1px solid var(--glass-border)',
+                zIndex: 100, // High z-index to sit on top
+                flexShrink: 0,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
             }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button variant="ghost" size="sm" onClick={() => navigate('/')} title="Back to Events"><ArrowLeft size={18} /></Button>
-                    <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)', margin: '0 8px' }}></div>
-                    <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(s * 1.2, 5))}><ZoomIn size={18} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(s / 1.2, 0.1))}><ZoomOut size={18} /></Button>
-                    <Button variant="ghost" size="sm" onClick={fitToScreen} title="Fit to Screen"><Maximize size={18} /></Button>
-                    <Button variant="primary" size="sm" onClick={addTable}><Plus size={18} /><span className="hide-mobile" style={{ marginLeft: '6px' }}>Add Table</span></Button>
+                {/* LEFT: Back & Context Title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/')} title="Back to Events">
+                        <ArrowLeft size={18} />
+                    </Button>
+
+                    <div style={{ height: '24px', width: '1px', background: 'var(--glass-border)' }} />
+
+                    {isRoomEditing ? (
+                        <div style={{ fontWeight: 'bold', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Grid size={18} /> Editing Room Shape
+                        </div>
+                    ) : isZoneEditing ? (
+                        <div style={{ fontWeight: 'bold', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Layers size={18} /> Editing Zones
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{event.name}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                {roomWidthFt}ft x {roomHeightFt}ft
+                            </span>
+                        </div>
+                    )}
                 </div>
+
+                {/* CENTER: Tools (Zoom) - Moved to Center for balance */}
+                <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px' }}>
+                    <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(s * 1.2, 5))}><ZoomIn size={16} /></Button>
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 4px', fontSize: '12px', color: 'var(--text-secondary)', minWidth: '40px', justifyContent: 'center' }}>
+                        {Math.round(scale * 100)}%
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(s / 1.2, 0.1))}><ZoomOut size={16} /></Button>
+                    <Button variant="ghost" size="sm" onClick={fitToScreen} title="Fit to Screen"><Maximize size={16} /></Button>
+                </div>
+
+                {/* RIGHT: Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="hide-mobile" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        {roomWidthFt}ft x {roomHeightFt}ft
-                    </div>
-
-                    {/* Integrated Zone & Export Controls */}
-                    <Button variant={isZoneEditing ? 'primary' : 'ghost'} size="sm" onClick={() => { setIsZoneEditing(!isZoneEditing); setIsRoomEditing(false); setShowEventSettings(false); setSelectedTableId(null); }} title="Edit Zones">
-                        <Layers size={18} />
-                    </Button>
-                    {/* Export Menu */}
-                    <div style={{ position: 'relative' }}>
+                    {isRoomEditing || isZoneEditing ? (
                         <Button
-                            variant={exportMenuOpen ? 'primary' : 'ghost'}
+                            variant="primary"
                             size="sm"
-                            onClick={() => setExportMenuOpen(!exportMenuOpen)}
-                            title="Export Options"
+                            onClick={() => { setIsRoomEditing(false); setIsZoneEditing(false); }}
                         >
-                            <Download size={18} />
+                            <Check size={18} /> <span style={{ marginLeft: '6px' }}>Done</span>
                         </Button>
-                        {exportMenuOpen && (
-                            <div className="glass-panel" style={{
-                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                width: '220px', padding: '8px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '4px'
-                            }}>
-                                <button className="menu-item" onClick={() => handleAdvancedExport('public')}>
-                                    Full Map (PDF)
-                                </button>
-                                <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '4px 0' }} />
-                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '4px 8px' }}>VENDOR PACKETS</div>
-                                {vendors.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No vendors added</div>}
-                                {vendors.map(v => (
-                                    <button
-                                        key={v.id}
-                                        className="menu-item"
-                                        onClick={() => handleAdvancedExport('tenant', v.id)}
-                                        style={{ fontSize: '12px', padding: '6px 8px' }}
-                                    >
-                                        {v.name}
-                                    </button>
-                                ))}
+                    ) : (
+                        <>
+                            <div className="hide-mobile" style={{ display: 'flex', gap: '8px' }}>
+                                <Button variant="outline" size="sm" onClick={() => { setIsZoneEditing(true); setIsRoomEditing(false); setShowEventSettings(false); }}>
+                                    <Layers size={16} /> <span style={{ marginLeft: '6px' }}>Zones</span>
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => { setIsRoomEditing(true); setIsZoneEditing(false); setShowEventSettings(false); }}>
+                                    <Grid size={16} /> <span style={{ marginLeft: '6px' }}>Room</span>
+                                </Button>
                             </div>
-                        )}
-                    </div>
 
-                    <Button
-                        variant={isRoomEditing ? 'primary' : 'outline'}
-                        size="sm"
-                        onClick={() => { setIsRoomEditing(!isRoomEditing); setShowEventSettings(false); setSelectedTableId(null); setIsZoneEditing(false); }}
-                        title="Edit Room Shape"
-                    >
-                        <Grid size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>{isRoomEditing ? 'Done' : 'Edit Room'}</span>
-                    </Button>
-                    <Button
-                        variant={showEventSettings ? 'primary' : 'ghost'}
-                        size="sm"
-                        onClick={() => { setShowEventSettings(!showEventSettings); setSelectedTableId(null); setIsRoomEditing(false); setIsZoneEditing(false); }}
-                    >
-                        <Settings size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Settings</span>
-                    </Button>
+                            <Button variant="primary" size="sm" onClick={addTable}>
+                                <Plus size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Add Table</span>
+                            </Button>
+
+                            {/* Export Menu */}
+                            <div style={{ position: 'relative' }}>
+                                <Button variant={exportMenuOpen ? 'primary' : 'ghost'} size="sm" onClick={() => setExportMenuOpen(!exportMenuOpen)}>
+                                    <Download size={18} />
+                                </Button>
+                                {exportMenuOpen && (
+                                    <div className="glass-panel" style={{
+                                        position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                        width: '220px', padding: '8px', zIndex: 110, display: 'flex', flexDirection: 'column', gap: '4px',
+                                        backgroundColor: 'var(--bg-card)'
+                                    }}>
+                                        <button className="menu-item" onClick={() => handleAdvancedExport('public')}>Full Map (PDF)</button>
+                                        <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '4px 0' }} />
+                                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '4px 8px' }}>VENDOR PACKETS</div>
+                                        {vendors.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No vendors added</div>}
+                                        {vendors.map(v => (
+                                            <button key={v.id} className="menu-item" onClick={() => handleAdvancedExport('tenant', v.id)} style={{ fontSize: '12px', padding: '6px 8px' }}>
+                                                {v.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <Button variant={showEventSettings ? 'primary' : 'ghost'} size="sm" onClick={() => setShowEventSettings(!showEventSettings)}>
+                                <Settings size={18} />
+                            </Button>
+                        </>
+                    )}
                 </div>
             </div>
 
