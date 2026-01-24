@@ -107,6 +107,9 @@ const FloorPlanPage = () => {
         const viewportH = rect.height;
 
         const margin = 40;
+        // The containerRef is the flex-grow area, so it already excludes the Toolbar height (64px).
+        // However, we want to ensure we have padding AROUND the map within that view.
+        // So standard margin is fine, but let's be generous.
         const availableW = viewportW - margin;
         const availableH = viewportH - margin;
 
