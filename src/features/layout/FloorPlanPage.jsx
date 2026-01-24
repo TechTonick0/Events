@@ -879,7 +879,7 @@ const FloorPlanPage = () => {
 
     if (!event) return <div className="page-container">Loading...</div>;
 
-    const selectedTable = getSelectedTable();
+
 
 
 
