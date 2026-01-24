@@ -714,18 +714,41 @@ const FloorPlanPage = () => {
             newBoundary[draggingVertexIndex] = { x: newX, y: newY };
             updateEventSettings({ boundary: newBoundary });
             return; // Done
-            let newX = initialObjPos.current.x + deltaFtX;
-            let newY = initialObjPos.current.y + deltaFtY;
+        }
 
-            newX = Math.round(newX);
-            newY = Math.round(newY);
+        // --- TABLE DRAG LOGIC ---
+        if (isDraggingTableRef.current) {
+            e.preventDefault();
+            const deltaFtX = (deltaPxX / scale) / PX_PER_FT;
+            const deltaFtY = (deltaPxY / scale) / PX_PER_FT;
 
-            // Bounding box check (simple rect check for now, upgrade to poly check later if needed)
-            newX = Math.max(0, Math.min(newX, roomWidthFt - w));
-            newY = Math.max(0, Math.min(newY, roomHeightFt - h));
+            // Move ALL selected tables
+            const curSelectedIds = selectedTableIdsRef.current;
+            const initPosMap = initialSelectedPositions.current;
 
-            updateTable(t.id, { x: newX, y: newY });
-        } else if (isPanning) {
+            const newTables = tables.map(t => {
+                // If we have a snapshot for this table, calculate its specific new pos
+                if (curSelectedIds.includes(t.id) && initPosMap[t.id]) {
+                    let nextX = initPosMap[t.id].x + deltaFtX;
+                    let nextY = initPosMap[t.id].y + deltaFtY;
+
+                    // Simple integer rounding for grid snap
+                    nextX = Math.round(nextX);
+                    nextY = Math.round(nextY);
+
+                    // Boundary Clamp (optional, based on room size)
+                    // nextX = Math.max(0, Math.min(nextX, roomWidthFt - (t.width||8)));
+                    // nextY = Math.max(0, Math.min(nextY, roomHeightFt - (t.height||3)));
+
+                    return { ...t, x: nextX, y: nextY };
+                }
+                return t;
+            });
+            updateEventTables(newTables);
+        }
+
+        if (isPanning) {
+            e.preventDefault();
             setPan({
                 x: initialObjPos.current.x + deltaPxX,
                 y: initialObjPos.current.y + deltaPxY
@@ -1166,22 +1189,18 @@ const FloorPlanPage = () => {
                     </div>
 
                     <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <Input
-                            label="Label"
-                            value={selectedTable.label}
-                            onChange={(e) => updateSelectedTable({ label: e.target.value })}
-                            {/* Single: Label */}
-                            {selectedTableIds.length === 1 && (() => {
-                                const t = getSelectedTables()[0];
-                                if (!t) return null;
-                                return (
-                                    <Input
-                                        label="Label (T-00)"
-                                        value={t.label}
-                                        onChange={(e) => updateTable(t.id, { label: e.target.value })}
-                                    />
-                                );
-                            })()}
+                        {/* Single: Label */}
+                        {selectedTableIds.length === 1 && (() => {
+                            const t = getSelectedTables()[0];
+                            if (!t) return null;
+                            return (
+                                <Input
+                                    label="Label (T-00)"
+                                    value={t.label}
+                                    onChange={(e) => updateTable(t.id, { label: e.target.value })}
+                                />
+                            );
+                        })()}
 
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
                             <div style={{ flex: 1 }}>
@@ -1294,7 +1313,7 @@ const FloorPlanPage = () => {
 
             {/* Right Side Panel: Event Settings */}
             {
-                showEventSettings && !selectedTable && !isDraggingTable && (
+                showEventSettings && selectedTableIds.length === 0 && !isDraggingTable && (
                     <div
                         className="glass-panel mobile-edit-panel"
                         onTouchStart={(e) => e.stopPropagation()}
