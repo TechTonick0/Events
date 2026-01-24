@@ -131,6 +131,44 @@ const FloorPlanPage = () => {
     }, [eventId, roomWidthFt, roomHeightFt]);
 
     // --- Data Helpers ---
+
+    const autoLabelTables = (tableList) => {
+        if (!tableList || tableList.length === 0) return tableList;
+
+        const cx = roomWidthFt / 2;
+        const cy = roomHeightFt / 2;
+
+        // Sort by Angle (Clockwise from Top-Left)
+        // Top-Left is roughly -135deg (-2.356 rad)
+        // We want that to be the "start" (smallest value).
+        // atan2 returns -PI to +PI.
+        // Range: -180(L) ... -135(TL) ... -90(T) ... 0(R) ... 90(B) ... 135(BL) ... 180(L)
+        // We want order: TL(-135) -> T(-90) -> R(0) -> B(90) -> BL(135) -> L(180) -> LT(-170)
+
+        // Pivot Point: -135deg (-2.356 rad)
+        // If angle < pivot, add 2PI (push to end of list)
+        // So -170 becomes 190.
+
+        const sorted = [...tableList].sort((a, b) => {
+            const angA = Math.atan2(a.y - cy, a.x - cx);
+            const angB = Math.atan2(b.y - cy, b.x - cx);
+
+            // Normalize relative to TL
+            const pivot = -2.356; // -135deg
+
+            const normA = angA < pivot ? angA + (2 * Math.PI) : angA;
+            const normB = angB < pivot ? angB + (2 * Math.PI) : angB;
+
+            return normA - normB;
+        });
+
+        // Re-assign Labels
+        return sorted.map((t, i) => ({
+            ...t,
+            label: `T-${i + 1}`
+        }));
+    };
+
     const updateEventTables = (newTables) => {
         const updatedEvents = [...events];
         updatedEvents[eventIndex] = { ...event, tables: newTables };
@@ -429,7 +467,11 @@ const FloorPlanPage = () => {
         newTable.x = Math.round(newTable.x);
         newTable.y = Math.round(newTable.y);
 
-        updateEventTables([...tables, newTable]);
+        newTable.x = Math.round(newTable.x);
+        newTable.y = Math.round(newTable.y);
+
+        // Add then Auto-Label
+        updateEventTables(autoLabelTables([...tables, newTable]));
         setSelectedTableIds([newTable.id]);
         setShowEventSettings(false);
     };
@@ -437,7 +479,9 @@ const FloorPlanPage = () => {
     const deleteTable = () => {
         if (selectedTableIds.length === 0) return;
         if (!window.confirm(`Delete ${selectedTableIds.length} tables?`)) return;
-        updateEventTables(tables.filter(t => !selectedTableIds.includes(t.id)));
+
+        const remaining = tables.filter(t => !selectedTableIds.includes(t.id));
+        updateEventTables(autoLabelTables(remaining));
         setSelectedTableIds([]);
     };
 
@@ -800,6 +844,14 @@ const FloorPlanPage = () => {
                 // Determine Logic: Shift to Add? Default Replace.
                 setSelectedTableIds(newSelection);
             }
+        }
+
+        // Auto-Label on Drag End (if moved)
+        if (isDraggingTable && hasMoved.current) {
+            // We need to trigger a rewrite of the tables with new labels
+            // logic: current state 'tables' is already updated with positions by handleMove
+            // we just need to re-sort and re-save them.
+            updateEventTables(autoLabelTables(tables));
         }
 
         setIsDraggingTable(false);
