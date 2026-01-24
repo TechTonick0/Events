@@ -1168,7 +1168,7 @@ const FloorPlanPage = () => {
             </div>
 
             {/* Right Side Panel: Table Edit */}
-            {selectedTable && !isDraggingTable && !isPanning && !isZooming && (
+            {selectedTableIds.length > 0 && !isDraggingTable && !isPanning && !isZooming && (
                 <div
                     className="glass-panel mobile-edit-panel"
                     onTouchStart={(e) => e.stopPropagation()}
