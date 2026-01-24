@@ -770,17 +770,19 @@ const FloorPlanPage = () => {
             // selectedTableIds remains whatever it was.
         }
 
-        if (isBoxSelecting && selectionBox) {
+        if (isBoxSelecting && selectionBox && containerRef.current) {
             const boxX = Math.min(selectionBox.startX, selectionBox.currentX);
             const boxY = Math.min(selectionBox.startY, selectionBox.currentY);
             const boxW = Math.abs(selectionBox.currentX - selectionBox.startX);
             const boxH = Math.abs(selectionBox.currentY - selectionBox.startY);
 
+            const rect = containerRef.current.getBoundingClientRect();
+
             const newSelection = [];
             tables.forEach(t => {
-                // Table Screen Coords
-                const tx = (t.x * PX_PER_FT * scale) + pan.x;
-                const ty = (t.y * PX_PER_FT * scale) + pan.y;
+                // Table Screen Coords = Container Offset + Pan + (Local * Scale)
+                const tx = rect.left + pan.x + (t.x * PX_PER_FT * scale);
+                const ty = rect.top + pan.y + (t.y * PX_PER_FT * scale);
                 const tw = (t.width || DEFAULT_TABLE_W_FT) * PX_PER_FT * scale;
                 const th = (t.height || DEFAULT_TABLE_H_FT) * PX_PER_FT * scale;
 
