@@ -1128,7 +1128,7 @@ const FloorPlanPage = () => {
                                     top: table.y * PX_PER_FT,
                                     width: wFt * PX_PER_FT,
                                     height: hFt * PX_PER_FT,
-                                    backgroundColor: isSelected ? 'var(--primary)' : (table.status === 'occupied' ? '#ef4444' : (zones.find(z => z.id === table.zoneId)?.color || '#10b981')),
+                                    backgroundColor: isSelected ? 'var(--primary)' : (zones.find(z => z.id === table.zoneId)?.color || '#10b981'),
                                     border: isSelected ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexDirection: 'column',
@@ -1210,38 +1210,30 @@ const FloorPlanPage = () => {
                                             ))}
                                         </select>
                                     </div>
-
-                                    {/* Status -- Single Only */}
-                                    <div>
-                                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Status</label>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                            {['available', 'booked', 'paid'].map(status => (
-                                                <button
-                                                    key={status}
-                                                    onClick={() => updateTable(t.id, { status })}
-                                                    style={{
-                                                        flex: 1, padding: '6px', fontSize: '11px', borderRadius: '4px',
-                                                        border: t.status === status ? '1px solid var(--primary)' : '1px solid var(--glass-border)',
-                                                        background: t.status === status ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                                                        color: 'white', textTransform: 'capitalize'
-                                                    }}
-                                                >
-                                                    {status}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
                                 </>
                             );
                         })()}
 
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-                            <div style={{ flex: 1 }}>
-                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Size (ft)</label>
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                    <button className="btn-ghost" style={{ flex: 1, border: '1px solid var(--glass-border)' }} onClick={() => updateSelectedTables({ width: 8, height: 3 })}>8x3</button>
-                                    <button className="btn-ghost" style={{ flex: 1, border: '1px solid var(--glass-border)' }} onClick={() => updateSelectedTables({ width: 6, height: 2.5 })}>6x2.5</button>
-                                </div>
+                            <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                                {/* Multi-Edit Compatible Inputs (if consistent) or just reset buttons */}
+                                {/* For simplicity, if multiple selected, we show buttons. If single, we show inputs? */}
+                                {/* The requirement was "What do these fields do?". Explicit is better. */}
+
+                                <Input
+                                    label="Width (ft)"
+                                    type="number"
+                                    value={selectedTableIds.length === 1 ? (getSelectedTables()[0]?.width || DEFAULT_TABLE_W_FT) : ''}
+                                    placeholder={selectedTableIds.length > 1 ? "Mix" : "8"}
+                                    onChange={(e) => updateSelectedTables({ width: parseFloat(e.target.value) })}
+                                />
+                                <Input
+                                    label="Depth (ft)"
+                                    type="number"
+                                    value={selectedTableIds.length === 1 ? (getSelectedTables()[0]?.height || DEFAULT_TABLE_H_FT) : ''}
+                                    placeholder={selectedTableIds.length > 1 ? "Mix" : "3"}
+                                    onChange={(e) => updateSelectedTables({ height: parseFloat(e.target.value) })}
+                                />
                             </div>
                             <Button variant="outline" onClick={rotateTable} icon={RotateCcw} title="Rotate">Rotate</Button>
                         </div>
