@@ -1150,20 +1150,7 @@ const FloorPlanPage = () => {
                         );
                     })}
 
-                    {/* Selection Box Overlay */}
-                    {isBoxSelecting && selectionBox && (
-                        <div style={{
-                            position: 'fixed', // Fixed to screen, not scaled map space
-                            left: Math.min(selectionBox.startX, selectionBox.currentX),
-                            top: Math.min(selectionBox.startY, selectionBox.currentY),
-                            width: Math.abs(selectionBox.currentX - selectionBox.startX),
-                            height: Math.abs(selectionBox.currentY - selectionBox.startY),
-                            border: '1px solid var(--primary)',
-                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                            pointerEvents: 'none',
-                            zIndex: 9999
-                        }} />
-                    )}
+
                 </div>
             </div>
 
@@ -1368,6 +1355,21 @@ const FloorPlanPage = () => {
 
 
             {/* Bottom Toolbar Removed - Features moved to Top Toolbar */}
+
+            {/* Selection Box Overlay - Moved to Root to avoid Transform Stacking Context issues */}
+            {isBoxSelecting && selectionBox && (
+                <div style={{
+                    position: 'fixed',
+                    left: Math.min(selectionBox.startX, selectionBox.currentX),
+                    top: Math.min(selectionBox.startY, selectionBox.currentY),
+                    width: Math.abs(selectionBox.currentX - selectionBox.startX),
+                    height: Math.abs(selectionBox.currentY - selectionBox.startY),
+                    border: '1px solid var(--primary)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    pointerEvents: 'none',
+                    zIndex: 9999
+                }} />
+            )}
 
             <style>{`
                 @keyframes slideLeft {
