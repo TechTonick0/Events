@@ -894,9 +894,12 @@ const FloorPlanPage = () => {
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
+                flexDirection: 'column',
                 overflow: 'hidden',
-                paddingTop: '50px', // Space for Fixed Header
-                paddingBottom: '80px', // Space for Fixed Nav
+                // Removed padding to align coordinate system (Visual vs Logic)
+                // Header/Nav will overlay the map, which is desired behavior for full-screen maps
+                paddingTop: 0,
+                paddingBottom: 0,
                 paddingLeft: 0,
                 paddingRight: 0,
                 zIndex: 1, // Below header(90)/nav(100)
@@ -1181,11 +1184,52 @@ const FloorPlanPage = () => {
                             const t = getSelectedTables()[0];
                             if (!t) return null;
                             return (
-                                <Input
-                                    label="Label (T-00)"
-                                    value={t.label}
-                                    onChange={(e) => updateTable(t.id, { label: e.target.value })}
-                                />
+                                <>
+                                    <Input
+                                        label="Label (T-00)"
+                                        value={t.label}
+                                        onChange={(e) => updateTable(t.id, { label: e.target.value })}
+                                    />
+
+                                    {/* Vendor -- Single Only */}
+                                    <div style={{ marginTop: '4px' }}>
+                                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Vendor</label>
+                                        <select
+                                            value={t.vendorId || ''}
+                                            onChange={(e) => updateTable(t.id, { vendorId: e.target.value })}
+                                            style={{
+                                                width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
+                                                padding: '8px', borderRadius: '4px', color: 'white', outline: 'none', marginTop: '4px'
+                                            }}
+                                        >
+                                            <option value="">(None)</option>
+                                            {vendors.map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Status -- Single Only */}
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Status</label>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                            {['available', 'booked', 'paid'].map(status => (
+                                                <button
+                                                    key={status}
+                                                    onClick={() => updateTable(t.id, { status })}
+                                                    style={{
+                                                        flex: 1, padding: '6px', fontSize: '11px', borderRadius: '4px',
+                                                        border: t.status === status ? '1px solid var(--primary)' : '1px solid var(--glass-border)',
+                                                        background: t.status === status ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                                        color: 'white', textTransform: 'capitalize'
+                                                    }}
+                                                >
+                                                    {status}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
                             );
                         })()}
 
