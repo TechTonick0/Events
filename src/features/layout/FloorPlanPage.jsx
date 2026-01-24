@@ -189,7 +189,7 @@ const FloorPlanPage = () => {
         setExportMenuOpen(false);
         setIsRoomEditing(false);
         setIsZoneEditing(false);
-        setSelectedTableId(null);
+        setSelectedTableIds([]);
 
         // Wait for UI to clear
         await new Promise(r => setTimeout(r, 100));
@@ -760,14 +760,14 @@ const FloorPlanPage = () => {
         if (isDraggingTable) {
             // If we were dragging a table, but we didn't actually move it > 2px, treat as a CLICK.
             if (!hasMoved.current && draggingTableIdRef.current) {
-                setSelectedTableId(draggingTableIdRef.current); // Select it now
+                setSelectedTableIds([draggingTableIdRef.current]); // Select it now (Array)
                 // Close other menus to prevent overlap
                 setIsZoneEditing(false);
                 setIsRoomEditing(false);
                 setShowEventSettings(false);
             }
             // If moved, we do nothing. The drag is done. 
-            // selectedTableId remains whatever it was (or null).
+            // selectedTableIds remains whatever it was.
         }
 
         if (isBoxSelecting && selectionBox) {
@@ -811,7 +811,7 @@ const FloorPlanPage = () => {
         setSnapLines([]); // Clear guides
         lastTouchDistance.current = null;
         if (isPanning && !hasMoved.current) {
-            setSelectedTableId(null);
+            setSelectedTableIds([]);
             setShowEventSettings(false);
         }
     };
