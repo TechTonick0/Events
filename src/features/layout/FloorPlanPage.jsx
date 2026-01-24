@@ -135,54 +135,83 @@ const FloorPlanPage = () => {
     const autoLabelTables = (tableList) => {
         if (!tableList || tableList.length === 0) return tableList;
 
-        // 1. Calculate Cluster Center (Bounding Box Center)
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        tableList.forEach(t => {
-            if (t.x < minX) minX = t.x;
-            if (t.x > maxX) maxX = t.x;
-            if (t.y < minY) minY = t.y;
-            if (t.y > maxY) maxY = t.y;
-        });
+        // --- Math Helpers for Polygon Path ---
+        const distSq = (p1, p2) => (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2;
+        const dist = (p1, p2) => Math.sqrt(distSq(p1, p2));
 
-        const cx = (minX + maxX) / 2;
-        const cy = (minY + maxY) / 2;
+        const projectToSegment = (p, a, b) => {
+            const l2 = distSq(a, b);
+            if (l2 === 0) return { point: a, t: 0, d: dist(p, a) };
+            let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            const proj = {
+                x: a.x + t * (b.x - a.x),
+                y: a.y + t * (b.y - a.y)
+            };
+            return { point: proj, t, d: dist(p, proj) };
+        };
 
-        // 2. Sort with Shells
-        const SHELL_SIZE = 10; // Feet. Group tables within 10ft "rings" from center.
+        const getPathMetrics = (t) => {
+            let minD = Infinity;
+            let pathLen = 0;
+            let bestPathLen = 0;
 
-        const sorted = [...tableList].sort((a, b) => {
-            // Distance from Center (Chebyshev for Rectangles: max(dx, dy))
-            // This treats "shells" as squares/rectangles, fitting the room shape better than circles.
-            const distA = Math.max(Math.abs(a.x - cx), Math.abs(a.y - cy));
-            const distB = Math.max(Math.abs(b.x - cx), Math.abs(b.y - cy));
+            // Iterate boundary segments
+            for (let i = 0; i < boundary.length; i++) {
+                const a = boundary[i];
+                const b = boundary[(i + 1) % boundary.length];
+                const segLen = dist(a, b);
 
-            // Shell Index (Outer -> Inner means Descending Distance)
-            const shellA = Math.floor(distA / SHELL_SIZE);
-            const shellB = Math.floor(distB / SHELL_SIZE);
-
-            if (shellA !== shellB) {
-                return shellB - shellA; // Outer (Larger Dist) first
+                const proj = projectToSegment(t, a, b);
+                if (proj.d < minD) {
+                    minD = proj.d;
+                    bestPathLen = pathLen + (segLen * proj.t);
+                }
+                pathLen += segLen;
             }
+            return { dist: minD, pathPos: bestPathLen };
+        };
 
-            // Same Shell: Sort by Clockwise Angle starting Top-Left (-135deg)
-            const angA = Math.atan2(a.y - cy, a.x - cx);
-            const angB = Math.atan2(b.y - cy, b.x - cx);
+        // 1. Classify Tables
+        const WALL_THRESHOLD = 8; // ft
+        const wallTables = [];
+        const innerTables = [];
 
-            // Pivot: -135deg (-2.356 rad). 
-            // We want angles >= pivot to come first. angles < pivot to be wrapped to end.
-            const pivot = -2.356;
+        tableList.forEach(t => {
+            const metrics = getPathMetrics(t);
+            // Store metrics for sorting
+            t._tempMetrics = metrics;
 
-            const normA = angA < pivot ? angA + (2 * Math.PI) : angA;
-            const normB = angB < pivot ? angB + (2 * Math.PI) : angB;
-
-            return normA - normB;
+            if (metrics.dist <= WALL_THRESHOLD) {
+                wallTables.push(t);
+            } else {
+                innerTables.push(t);
+            }
         });
 
-        // Re-assign Labels
-        return sorted.map((t, i) => ({
-            ...t,
-            label: `T-${i + 1}`
-        }));
+        // 2. Sort Wall Tables by Path Position (Walking the perimeter)
+        wallTables.sort((a, b) => a._tempMetrics.pathPos - b._tempMetrics.pathPos);
+
+        // 3. Sort Inner Tables by Reading Order (Top-Down, Left-Right)
+        // Add row tolerance
+        innerTables.sort((a, b) => {
+            const ROW_H = 4; // ft tolerance
+            const rowA = Math.floor(a.y / ROW_H);
+            const rowB = Math.floor(b.y / ROW_H);
+            if (rowA !== rowB) return rowA - rowB;
+            return a.x - b.x;
+        });
+
+        // 4. Merge & Relabel
+        const finalOrder = [...wallTables, ...innerTables];
+
+        return finalOrder.map((t, i) => {
+            const { _tempMetrics, ...cleanTable } = t; // Cleanup temp prop
+            return {
+                ...cleanTable,
+                label: `T-${i + 1}`
+            };
+        });
     };
 
     const updateEventTables = (newTables) => {
