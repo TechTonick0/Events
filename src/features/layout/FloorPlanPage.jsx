@@ -12,6 +12,8 @@ import { v4 as uuidv4 } from 'uuid';
 // 1 Grid Unit = 1 Foot
 // Visually, 1 Foot = 10 Pixels (REDUCED from 20 to fit better)
 const PX_PER_FT = 10;
+// Note: We use a lower opacity for zones to ensure grid/floor separation
+
 
 // Default "Standard" Table Size in Feet
 const DEFAULT_TABLE_W_FT = 8;
@@ -97,6 +99,11 @@ const FloorPlanPage = () => {
     const hasMoved = useRef(false);
     const lastTouchDistance = useRef(null); // For Pinch
     const containerRef = useRef(null);
+
+    // Zone Drawing State
+    const [drawingZoneStart, setDrawingZoneStart] = useState(null); // {x, y}
+    const drawingZoneStartRef = useRef(null); // Sync ref
+
 
     // --- AUTO-FIT LOGIC ---
     const fitToScreen = () => {
@@ -217,6 +224,27 @@ const FloorPlanPage = () => {
         });
     };
 
+    const getZoneForTable = (t, currentZones) => {
+        const center = {
+            x: t.x + (t.width || DEFAULT_TABLE_W_FT) / 2,
+            y: t.y + (t.height || DEFAULT_TABLE_H_FT) / 2
+        };
+
+        // Iterate in REVERSE (top-most zone wins)
+        for (let i = currentZones.length - 1; i >= 0; i--) {
+            const z = currentZones[i];
+            if (
+                center.x >= z.x &&
+                center.x <= z.x + z.width &&
+                center.y >= z.y &&
+                center.y <= z.y + z.height
+            ) {
+                return z;
+            }
+        }
+        return null;
+    };
+
     const updateEventTables = (newTables) => {
         const updatedEvents = [...events];
         updatedEvents[eventIndex] = { ...event, tables: newTables };
@@ -225,43 +253,33 @@ const FloorPlanPage = () => {
 
     const updateEventSettings = (updates) => {
         const updatedEvents = [...events];
+        const target = updatedEvents[eventIndex];
 
-        if (updates.name) updatedEvents[eventIndex].name = updates.name;
-        if (updates.date) updatedEvents[eventIndex].date = updates.date;
+        if (updates.name) target.name = updates.name;
+        if (updates.date) target.date = updates.date;
 
         if (updates.width || updates.height) {
-            updatedEvents[eventIndex].settings = {
-                ...updatedEvents[eventIndex].settings,
-                width: updates.width || updatedEvents[eventIndex].settings.width,
-                height: updates.height || updatedEvents[eventIndex].settings.height
+            target.settings = {
+                ...target.settings,
+                width: updates.width || target.settings.width,
+                height: updates.height || target.settings.height
             };
         }
         if (updates.boundary) {
-            updatedEvents[eventIndex].settings.boundary = updates.boundary;
+            target.settings.boundary = updates.boundary;
         }
         if (updates.zones) {
-            updatedEvents[eventIndex].zones = updates.zones;
+            target.zones = updates.zones;
         }
 
         setEvents(updatedEvents);
     };
 
-    const addZone = () => {
-        const newZone = {
-            id: uuidv4(),
-            name: `Zone ${zones.length + 1}`,
-            color: '#3b82f6',
-            price: 100
-        };
-        updateEventSettings({ zones: [...zones, newZone] });
-    };
+    // addZone removed (Interact via Drawing)
 
     const deleteZone = (id) => {
-        if (window.confirm('Delete zone? Tables will revert to no zone.')) {
+        if (window.confirm('Delete zone?')) {
             updateEventSettings({ zones: zones.filter(z => z.id !== id) });
-            // Cleanup table references
-            const cleanedTables = tables.map(t => t.zoneId === id ? { ...t, zoneId: null } : t);
-            updateEventTables(cleanedTables);
         }
     };
 
@@ -653,7 +671,7 @@ const FloorPlanPage = () => {
         // Handle Mobile Pinch/Pan (2 fingers)
         if (e.touches && e.touches.length === 2) {
             setIsZooming(true);
-            setIsPanning(false); // Pinch handles pan too usually, but let's keep separate for now
+            setIsPanning(false);
             setIsDraggingTable(false);
             isDraggingTableRef.current = false;
             lastTouchDistance.current = getTouchDistance(e.touches);
@@ -664,22 +682,26 @@ const FloorPlanPage = () => {
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
         // Determine Action
-        // Right Click (2) OR Middle Click (1) -> Pan
-        // Left Click (0) -> Box Select (if on background)
         const isRightClick = e.button === 2 || e.button === 1;
-        const isTouchPan = e.touches && e.touches.length === 2; // Handled above, but just in case
+        const isTouchPan = e.touches && e.touches.length === 2;
 
         if (isRightClick || isTouchPan) {
             setIsPanning(true);
             setIsBoxSelecting(false);
+        } else if (isZoneEditing) {
+            // Start Drawing Zone
+            const rect = containerRef.current.getBoundingClientRect();
+            // Convert to World Coordinates
+            const worldX = (clientX - rect.left - pan.x) / scale / PX_PER_FT;
+            const worldY = (clientY - rect.top - pan.y) / scale / PX_PER_FT;
+
+            setDrawingZoneStart({ x: worldX, y: worldY });
+            drawingZoneStartRef.current = { x: worldX, y: worldY };
         } else {
-            // Left Click / Single Touch -> Box Select
-            // Only if NOT clicking a table (handled by handleTableDown propagation stop)
+            // Box Select
             setIsBoxSelecting(true);
             setIsPanning(false);
             setSelectionBox({ startX: clientX, startY: clientY, currentX: clientX, currentY: clientY });
-
-            // Clear selection on start of new box select (unless Shift?)
             if (!e.shiftKey) {
                 setSelectedTableIds([]);
             }
@@ -746,6 +768,25 @@ const FloorPlanPage = () => {
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             setSelectionBox(prev => ({ ...prev, currentX: clientX, currentY: clientY }));
+            return;
+        }
+
+        // Zone Drawing Visual
+        if (drawingZoneStartRef.current) {
+            // We don't render a temp box state, we just wait for Up to create?
+            // No, user needs feedback. We can use a ref-driven temp box or state.
+            // For React perf, let's use a "currentDrag" state if it's not too heavy.
+            // Actually, we can just let 'handleUp' create it, but we need a visual.
+            // Let's use 'selectionBox' for the visual since it's already a screen-space overlay!
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            // Just reuse selection box state for visual feedback, but flag logic differently in Down/Up
+            setSelectionBox({
+                startX: (dragStart.current.x),
+                startY: (dragStart.current.y),
+                currentX: clientX,
+                currentY: clientY
+            });
             return;
         }
 
@@ -849,17 +890,48 @@ const FloorPlanPage = () => {
     };
 
     const handleUp = () => {
+        if (drawingZoneStartRef.current) {
+            // Finalize Zone
+            const start = drawingZoneStartRef.current;
+            if (selectionBox) {
+                // Calc dimensions in feet
+                const rect = containerRef.current.getBoundingClientRect();
+                const endX = (selectionBox.currentX - rect.left - pan.x) / scale / PX_PER_FT;
+                const endY = (selectionBox.currentY - rect.top - pan.y) / scale / PX_PER_FT;
+
+                const x = Math.min(start.x, endX);
+                const y = Math.min(start.y, endY);
+                const w = Math.abs(endX - start.x);
+                const h = Math.abs(endY - start.y);
+
+                if (w > 1 && h > 1) { // Min size
+                    const newZone = {
+                        id: uuidv4(),
+                        name: `Zone ${zones.length + 1}`,
+                        color: zones.length > 0 ? zones[zones.length - 1].color : '#3b82f6', // Inherit last color for ease or default
+                        price: zones.length > 0 ? zones[zones.length - 1].price : 100,
+                        x: Math.round(x), y: Math.round(y),
+                        width: Math.round(w), height: Math.round(h)
+                    };
+                    updateEventSettings({ zones: [...zones, newZone] });
+                }
+            }
+            setDrawingZoneStart(null);
+            drawingZoneStartRef.current = null;
+            setSelectionBox(null);
+            return;
+        }
+
         if (isDraggingTable) {
             // If we were dragging a table, but we didn't actually move it > 2px, treat as a CLICK.
             if (!hasMoved.current && draggingTableIdRef.current) {
-                setSelectedTableIds([draggingTableIdRef.current]); // Select it now (Array)
+                setSelectedTableIds([draggingTableIdRef.current]);
                 // Close other menus to prevent overlap
-                setIsZoneEditing(false);
-                setIsRoomEditing(false);
+                // Don't close Zone Editing here if we want to allow selecting tables WHILE seeing zones?
+                // But usually clicking a table exits zone drawing mode?
+                // Let's keep it fluid.
                 setShowEventSettings(false);
             }
-            // If moved, we do nothing. The drag is done. 
-            // selectedTableIds remains whatever it was.
         }
 
         if (isBoxSelecting && selectionBox && containerRef.current) {
@@ -872,7 +944,6 @@ const FloorPlanPage = () => {
 
             const newSelection = [];
             tables.forEach(t => {
-                // Table Screen Coords = Container Offset + Pan + (Local * Scale)
                 const tx = rect.left + pan.x + (t.x * PX_PER_FT * scale);
                 const ty = rect.top + pan.y + (t.y * PX_PER_FT * scale);
                 const tw = (t.width || DEFAULT_TABLE_W_FT) * PX_PER_FT * scale;
@@ -889,16 +960,12 @@ const FloorPlanPage = () => {
             });
 
             if (newSelection.length > 0) {
-                // Determine Logic: Shift to Add? Default Replace.
                 setSelectedTableIds(newSelection);
             }
         }
 
         // Auto-Label on Drag End (if moved)
         if (isDraggingTable && hasMoved.current) {
-            // We need to trigger a rewrite of the tables with new labels
-            // logic: current state 'tables' is already updated with positions by handleMove
-            // we just need to re-sort and re-save them.
             updateEventTables(autoLabelTables(tables));
         }
 
@@ -1150,6 +1217,22 @@ const FloorPlanPage = () => {
                             style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
                         />
 
+                        {/* Spatial Zones Layer */}
+                        {zones.map(z => (
+                            <rect
+                                key={z.id}
+                                x={z.x * PX_PER_FT}
+                                y={z.y * PX_PER_FT}
+                                width={z.width * PX_PER_FT}
+                                height={z.height * PX_PER_FT}
+                                fill={z.color}
+                                fillOpacity={0.2}
+                                stroke={z.color}
+                                strokeWidth={2 / scale}
+                                style={{ pointerEvents: 'none' }} // Underlying, no clicks (edits via panel?)
+                            />
+                        ))}
+
                         {/* Snap Guides */}
                         {isRoomEditing && snapLines.map((line, i) => (
                             <line
@@ -1257,7 +1340,8 @@ const FloorPlanPage = () => {
                                     top: table.y * PX_PER_FT,
                                     width: wFt * PX_PER_FT,
                                     height: hFt * PX_PER_FT,
-                                    backgroundColor: isSelected ? 'var(--primary)' : (zones.find(z => z.id === table.zoneId)?.color || '#10b981'),
+                                    backgroundColor: isSelected ? 'var(--primary)' :
+                                        (getZoneForTable(table, zones)?.color || '#10b981'),
                                     border: isSelected ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
                                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexDirection: 'column',
@@ -1305,7 +1389,7 @@ const FloorPlanPage = () => {
                         <h3 style={{ fontSize: '16px' }}>Edit Table</h3>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <Button variant="ghost" size="sm" onClick={rotateTable} title="Rotate (Swap Dimensions)"><RotateCcw size={18} /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => setSelectedTableId(null)}><X size={18} /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedTableIds([])}><X size={18} /></Button>
                         </div>
                     </div>
 
@@ -1314,6 +1398,7 @@ const FloorPlanPage = () => {
                         {selectedTableIds.length === 1 && (() => {
                             const t = getSelectedTables()[0];
                             if (!t) return null;
+                            const currentZone = getZoneForTable(t, zones);
                             return (
                                 <>
                                     <Input
@@ -1321,6 +1406,9 @@ const FloorPlanPage = () => {
                                         value={t.label}
                                         onChange={(e) => updateTable(t.id, { label: e.target.value })}
                                     />
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                        Zone: {currentZone ? `${currentZone.name} ($${currentZone.price})` : "None"}
+                                    </div>
 
                                     {/* Vendor -- Single Only */}
                                     <div style={{ marginTop: '4px' }}>
@@ -1345,10 +1433,6 @@ const FloorPlanPage = () => {
 
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
                             <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
-                                {/* Multi-Edit Compatible Inputs (if consistent) or just reset buttons */}
-                                {/* For simplicity, if multiple selected, we show buttons. If single, we show inputs? */}
-                                {/* The requirement was "What do these fields do?". Explicit is better. */}
-
                                 <Input
                                     label="Width (ft)"
                                     type="number"
@@ -1365,36 +1449,6 @@ const FloorPlanPage = () => {
                                 />
                             </div>
                             <Button variant="outline" onClick={rotateTable} icon={RotateCcw} title="Rotate">Rotate</Button>
-                        </div>
-
-                        {/* Zone Assignment */}
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: '6px' }}>Zone</label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                <button
-                                    onClick={() => updateSelectedTables({ zoneId: null })}
-                                    style={{
-                                        padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
-                                        border: '1px solid var(--glass-border)',
-                                        background: 'transparent', color: 'white'
-                                    }}
-                                >
-                                    None
-                                </button>
-                                {zones.map(z => (
-                                    <button
-                                        key={z.id}
-                                        onClick={() => updateSelectedTables({ zoneId: z.id })}
-                                        style={{
-                                            padding: '6px 10px', fontSize: '12px', borderRadius: '4px',
-                                            border: '1px solid transparent',
-                                            background: z.color, color: 'white'
-                                        }}
-                                    >
-                                        {z.name}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
 
                         <Button variant="danger" onClick={deleteTable} icon={Trash2}>Delete {selectedTableIds.length > 1 ? 'Tables' : 'Table'}</Button>
@@ -1422,44 +1476,50 @@ const FloorPlanPage = () => {
                         </div>
 
                         <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <Button variant="primary" onClick={addZone} icon={Plus}>Add New Zone</Button>
+                            <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', fontSize: '13px', border: '1px solid var(--primary)' }}>
+                                <strong>Draw on Map:</strong> Drag on the floor plan to create a new zone region. New regions inherit the color/price of the last created zone.
+                            </div>
 
-                            {zones.map((zone, i) => (
-                                <div key={zone.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
-                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                                        <Input
-                                            value={zone.name}
-                                            onChange={(e) => {
-                                                const newZones = [...zones];
-                                                newZones[i].name = e.target.value;
-                                                updateEventSettings({ zones: newZones });
-                                            }}
-                                        />
-                                        <input
-                                            type="color"
-                                            value={zone.color}
-                                            onChange={(e) => {
-                                                const newZones = [...zones];
-                                                newZones[i].color = e.target.value;
-                                                updateEventSettings({ zones: newZones });
-                                            }}
-                                            style={{ width: '40px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                        />
+                            {zones.slice().reverse().map((zone, i) => {
+                                // We reverse to show top-stack first in list
+                                const realIndex = zones.length - 1 - i;
+                                return (
+                                    <div key={zone.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                            <Input
+                                                value={zone.name}
+                                                onChange={(e) => {
+                                                    const newZones = [...zones];
+                                                    newZones[realIndex].name = e.target.value;
+                                                    updateEventSettings({ zones: newZones });
+                                                }}
+                                            />
+                                            <input
+                                                type="color"
+                                                value={zone.color}
+                                                onChange={(e) => {
+                                                    const newZones = [...zones];
+                                                    newZones[realIndex].color = e.target.value;
+                                                    updateEventSettings({ zones: newZones });
+                                                }}
+                                                style={{ width: '40px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <Input
+                                                type="number" label="Price"
+                                                value={zone.price}
+                                                onChange={(e) => {
+                                                    const newZones = [...zones];
+                                                    newZones[realIndex].price = e.target.value;
+                                                    updateEventSettings({ zones: newZones });
+                                                }}
+                                            />
+                                            <Button variant="danger" size="sm" onClick={() => deleteZone(zone.id)}><Trash2 size={16} /></Button>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <Input
-                                            type="number" label="Price"
-                                            value={zone.price}
-                                            onChange={(e) => {
-                                                const newZones = [...zones];
-                                                newZones[i].price = e.target.value;
-                                                updateEventSettings({ zones: newZones });
-                                            }}
-                                        />
-                                        <Button variant="danger" size="sm" onClick={() => deleteZone(zone.id)}><Trash2 size={16} /></Button>
-                                    </div>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     </div>
                 )
@@ -1523,20 +1583,20 @@ const FloorPlanPage = () => {
 
             {/* Bottom Toolbar Removed - Features moved to Top Toolbar */}
 
-            {/* Selection Box Overlay - Moved to Root to avoid Transform Stacking Context issues */}
-            {isBoxSelecting && selectionBox && (
+            {/* Selection Box Overlay - Reuse for Drawing Zone too */}
+            {(isBoxSelecting && selectionBox) || (isZoneEditing && drawingZoneStartRef.current && selectionBox) ? (
                 <div style={{
                     position: 'fixed',
                     left: Math.min(selectionBox.startX, selectionBox.currentX),
                     top: Math.min(selectionBox.startY, selectionBox.currentY),
                     width: Math.abs(selectionBox.currentX - selectionBox.startX),
                     height: Math.abs(selectionBox.currentY - selectionBox.startY),
-                    border: '1px solid var(--primary)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    border: isZoneEditing ? '2px dashed var(--primary)' : '1px solid var(--primary)',
+                    backgroundColor: isZoneEditing ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.2)',
                     pointerEvents: 'none',
                     zIndex: 9999
                 }} />
-            )}
+            ) : null}
 
             <style>{`
                 @keyframes slideLeft {
