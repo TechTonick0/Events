@@ -118,11 +118,13 @@ const FloorPlanPage = () => {
         const viewportH = rect.height;
 
         const margin = 40;
-        // The containerRef is the flex-grow area, so it already excludes the Toolbar height (64px).
-        // However, we want to ensure we have padding AROUND the map within that view.
-        // So standard margin is fine, but let's be generous.
+        // NAV BAR OFFSET: The bottom nav covers the bottom ~80px.
+        // We need to treat the available height as significantly smaller to ensure the whole map
+        // is visible above the nav bar.
+        const bottomNavOffset = 100; // 64px nav + padding
+
         const availableW = viewportW - margin;
-        const availableH = viewportH - margin;
+        const availableH = viewportH - margin - bottomNavOffset;
 
         const scaleW = availableW / canvasWidthPx;
         const scaleH = availableH / canvasHeightPx;
@@ -132,8 +134,9 @@ const FloorPlanPage = () => {
         const scaledCanvasW = canvasWidthPx * newScale;
         const scaledCanvasH = canvasHeightPx * newScale;
 
+        // Center in the AVAILABLE space (shifted up slightly due to bottom offset)
         const offsetX = (viewportW - scaledCanvasW) / 2;
-        const offsetY = (viewportH - scaledCanvasH) / 2;
+        const offsetY = ((viewportH - bottomNavOffset) - scaledCanvasH) / 2; // Center in top portion
 
         setScale(newScale);
         setPan({ x: offsetX, y: offsetY });
@@ -1031,9 +1034,9 @@ const FloorPlanPage = () => {
                     nextX = Math.round(nextX);
                     nextY = Math.round(nextY);
 
-                    // Boundary Clamp (optional, based on room size)
-                    // nextX = Math.max(0, Math.min(nextX, roomWidthFt - (t.width||8)));
-                    // nextY = Math.max(0, Math.min(nextY, roomHeightFt - (t.height||3)));
+                    // Boundary Clamp (based on room size)
+                    nextX = Math.max(0, Math.min(nextX, roomWidthFt - (t.width || DEFAULT_TABLE_W_FT)));
+                    nextY = Math.max(0, Math.min(nextY, roomHeightFt - (t.height || DEFAULT_TABLE_H_FT)));
 
                     return { ...t, x: nextX, y: nextY };
                 }
