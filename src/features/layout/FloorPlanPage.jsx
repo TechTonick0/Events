@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, X, ZoomIn, ZoomOut, Maximize, RotateCcw, Settings, ArrowLeft, Download, Layers, Grid } from 'lucide-react';
+import { Plus, Trash2, X, ZoomIn, ZoomOut, Maximize, RotateCcw, Settings, ArrowLeft, Download, Layers, Grid, Check, LogOut } from 'lucide-react';
 import useLocalStorage from '../../hooks/useLocalStorage';
+import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import html2canvas from 'html2canvas';
@@ -22,6 +23,7 @@ const DEFAULT_TABLE_H_FT = 3;
 const FloorPlanPage = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
+    const { logout } = useAuth();
     const [events, setEvents] = useLocalStorage('cardshow_events', []);
 
     // Derived State
@@ -100,9 +102,11 @@ const FloorPlanPage = () => {
     const lastTouchDistance = useRef(null); // For Pinch
     const containerRef = useRef(null);
 
-    // Zone Drawing State
+    // Zone Paint Mode State
     const [drawingZoneStart, setDrawingZoneStart] = useState(null); // {x, y}
     const drawingZoneStartRef = useRef(null); // Sync ref
+    const [activeZoneId, setActiveZoneId] = useState(null); // Which zone type we are painting
+
 
 
     // --- AUTO-FIT LOGIC ---
@@ -230,19 +234,133 @@ const FloorPlanPage = () => {
             y: t.y + (t.height || DEFAULT_TABLE_H_FT) / 2
         };
 
-        // Iterate in REVERSE (top-most zone wins)
-        for (let i = currentZones.length - 1; i >= 0; i--) {
-            const z = currentZones[i];
+        // Note: 'zones' are now just Definitions. We need to check 'zoneRegions'.
+        // Wait, for this refactor, we are changing the data model.
+        // If we haven't migrated data, we should be careful.
+        // New Model: event.settings.zones = Definitions (metadata)
+        // New Model: event.settings.zoneRegions = Spatial Rects { zoneId, x, y, width, height }
+
+        // Let's assume 'zones' in the component scope refers to Definitions for now, 
+        // and we need to pull 'zoneRegions' from settings.
+        const regions = event.settings?.zoneRegions || []; // Fallback?
+
+        // Check containment in any region
+        // Since regions are "Painter's layered", effectively we just check if it's inside ANY region. 
+        // But what if they overlap?
+        // With the "Overwrite" logic, regions shouldn't overlap unless they are same-zone (merged).
+        // So we can just find the first region containing the point.
+
+        for (const r of regions) {
             if (
-                center.x >= z.x &&
-                center.x <= z.x + z.width &&
-                center.y >= z.y &&
-                center.y <= z.y + z.height
+                center.x >= r.x &&
+                center.x <= r.x + r.width &&
+                center.y >= r.y &&
+                center.y <= r.y + r.height
             ) {
-                return z;
+                // Return validity zone definition
+                return zones.find(z => z.id === r.zoneId);
             }
         }
         return null;
+    };
+
+    // --- Boolean Logic Helpers ---
+    const rectIntersect = (r1, r2) => {
+        return !(r2.x >= r1.x + r1.width ||
+            r2.x + r2.width <= r1.x ||
+            r2.y >= r1.y + r1.height ||
+            r2.y + r2.height <= r1.y);
+    };
+
+    // New: Get the intersection rectangle of two rects
+    const getRectIntersection = (r1, r2) => {
+        const x1 = Math.max(r1.x, r2.x);
+        const y1 = Math.max(r1.y, r2.y);
+        const x2 = Math.min(r1.x + r1.width, r2.x + r2.width);
+        const y2 = Math.min(r1.y + r1.height, r2.y + r2.height);
+
+        if (x2 > x1 && y2 > y1) {
+            return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+        }
+        return null;
+    };
+
+    const subtractRect = (subject, clipper) => {
+        if (!rectIntersect(subject, clipper)) return [subject];
+
+        const result = [];
+        const s = { ...subject }; // Copied subject
+
+        // 1. Top Strip
+        if (s.y < clipper.y) {
+            result.push({ ...s, height: clipper.y - s.y, id: uuidv4() });
+            s.y = clipper.y;
+            s.height -= (clipper.y - subject.y);
+        }
+        // 2. Bottom Strip
+        if (s.y + s.height > clipper.y + clipper.height) {
+            const bottomY = clipper.y + clipper.height;
+            result.push({ ...s, y: bottomY, height: (subject.y + subject.height) - bottomY, id: uuidv4() });
+            s.height = bottomY - s.y;
+        }
+        // 3. Left Strip
+        if (s.x < clipper.x) {
+            result.push({ ...s, width: clipper.x - s.x, id: uuidv4() });
+            s.x = clipper.x;
+            s.width -= (clipper.x - subject.x);
+        }
+        // 4. Right Strip
+        if (s.x + s.width > clipper.x + clipper.width) {
+            const rightX = clipper.x + clipper.width;
+            result.push({ ...s, x: rightX, width: (subject.x + subject.width) - rightX, id: uuidv4() });
+            s.width = rightX - s.x;
+        }
+
+        return result;
+    };
+
+    const performZoneSubtraction = (newRegion, existingRegions) => {
+        let finalRegions = [];
+        // For each existing region
+        for (const existing of existingRegions) {
+            // "Paint" Logic: The new region is fresh paint.
+            // It sits ON TOP of everything.
+            // Therefore, ANYTHING below it (Same Zone or Diff Zone) must be cut.
+            // This prevents alpha-stacking and ensures clean tiling.
+
+            if (rectIntersect(existing, newRegion)) {
+                const pieces = subtractRect(existing, newRegion);
+                finalRegions.push(...pieces.map(p => ({ ...p, zoneId: existing.zoneId })));
+            } else {
+                finalRegions.push(existing);
+            }
+        }
+        // Add the new one
+        finalRegions.push(newRegion);
+        return finalRegions;
+    };
+
+    const clipZonesToRoom = (regions, roomW, roomH) => {
+        console.log('Clipping Zones:', { regionsCount: regions.length, roomW, roomH });
+        const roomRect = { x: 0, y: 0, width: roomW, height: roomH };
+        const newRegions = [];
+
+        for (const r of regions) {
+            const intersection = getRectIntersection(r, roomRect);
+            if (intersection) {
+                newRegions.push({
+                    ...r,
+                    x: intersection.x,
+                    y: intersection.y,
+                    width: intersection.width,
+                    height: intersection.height
+                });
+            } else {
+                console.log('Dropping Region (Out of bounds):', r);
+            }
+        }
+        console.log('Clipped Zones Result:', newRegions.length);
+        return newRegions;
     };
 
     const updateEventTables = (newTables) => {
@@ -252,34 +370,77 @@ const FloorPlanPage = () => {
     };
 
     const updateEventSettings = (updates) => {
-        const updatedEvents = [...events];
-        const target = updatedEvents[eventIndex];
+        // Create a deep copy of events to avoid mutating state references
+        const updatedEvents = events.map((e, i) => {
+            if (i !== eventIndex) return e;
 
-        if (updates.name) target.name = updates.name;
-        if (updates.date) target.date = updates.date;
+            // Found target event, create new object
+            const updatedEvent = { ...e };
 
-        if (updates.width || updates.height) {
-            target.settings = {
-                ...target.settings,
-                width: updates.width || target.settings.width,
-                height: updates.height || target.settings.height
-            };
-        }
-        if (updates.boundary) {
-            target.settings.boundary = updates.boundary;
-        }
-        if (updates.zones) {
-            target.zones = updates.zones;
-        }
+            if (updates.name) updatedEvent.name = updates.name;
+            if (updates.date) updatedEvent.date = updates.date;
+
+            // Handle Settings Updates
+            if (updates.width || updates.height || updates.boundary || updates.zoneRegions) {
+                updatedEvent.settings = { ...updatedEvent.settings }; // Clone settings
+            }
+
+            if (updates.width || updates.height) {
+                const newW = Number(updates.width) || Number(updatedEvent.settings.width);
+                const newH = Number(updates.height) || Number(updatedEvent.settings.height);
+
+                updatedEvent.settings.width = newW;
+                updatedEvent.settings.height = newH;
+
+                // Cleanup Zones logic
+                const currentRegions = updatedEvent.settings.zoneRegions || [];
+                if (currentRegions.length > 0) {
+                    updatedEvent.settings.zoneRegions = clipZonesToRoom(currentRegions, newW, newH);
+                }
+            }
+
+            if (updates.boundary) {
+                updatedEvent.settings.boundary = updates.boundary;
+            }
+
+            // Explicit zoneRegions update overrides automatic clipping if both present
+            if (updates.zoneRegions) {
+                updatedEvent.settings.zoneRegions = updates.zoneRegions;
+            }
+
+            if (updates.zones) {
+                updatedEvent.zones = updates.zones;
+            }
+
+            return updatedEvent;
+        });
 
         setEvents(updatedEvents);
     };
 
-    // addZone removed (Interact via Drawing)
+    // Legacy migration helper (run once effectively)
+    const getRegions = () => event.settings?.zoneRegions || [];
+    // If we have legacy 'zones' with spatial data, we should migrate them? 
+    // For now, let's just use the new array. User can clear old ones.
 
-    const deleteZone = (id) => {
-        if (window.confirm('Delete zone?')) {
-            updateEventSettings({ zones: zones.filter(z => z.id !== id) });
+    const addZoneType = () => {
+        const newZone = {
+            id: uuidv4(),
+            name: `New Zone Type`,
+            color: '#3b82f6',
+            price: 100
+        };
+        updateEventSettings({ zones: [...zones, newZone] });
+        setActiveZoneId(newZone.id);
+    };
+
+    const deleteZoneType = (id) => {
+        if (window.confirm('Delete this zone type? All regions of this type will be removed.')) {
+            updateEventSettings({
+                zones: zones.filter(z => z.id !== id),
+                zoneRegions: getRegions().filter(r => r.zoneId !== id)
+            });
+            if (activeZoneId === id) setActiveZoneId(null);
         }
     };
 
@@ -631,6 +792,7 @@ const FloorPlanPage = () => {
 
     const handleTableDown = (e, table) => {
         e.stopPropagation();
+        if (isZoneEditing) return; // Disable table interaction while painting zones
         if (e.touches && e.touches.length > 1) return; // Allow pinch via container handler if mult-touch
 
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -891,9 +1053,9 @@ const FloorPlanPage = () => {
 
     const handleUp = () => {
         if (drawingZoneStartRef.current) {
-            // Finalize Zone
+            // Finalize Zone Paint
             const start = drawingZoneStartRef.current;
-            if (selectionBox) {
+            if (selectionBox && activeZoneId) {
                 // Calc dimensions in feet
                 const rect = containerRef.current.getBoundingClientRect();
                 const endX = (selectionBox.currentX - rect.left - pan.x) / scale / PX_PER_FT;
@@ -904,16 +1066,29 @@ const FloorPlanPage = () => {
                 const w = Math.abs(endX - start.x);
                 const h = Math.abs(endY - start.y);
 
-                if (w > 1 && h > 1) { // Min size
-                    const newZone = {
+                // CLAMP TO ROOM BOUNDS
+                const clampedX = Math.max(0, x);
+                const clampedY = Math.max(0, y);
+                // The right/bottom edge of the rect cant exceed room
+                const maxW = roomWidthFt - clampedX;
+                const maxH = roomHeightFt - clampedY;
+
+                // If we started outside or dragged weirdly, fit it in
+                const clampedW = Math.min(w, maxW);
+                const clampedH = Math.min(h, maxH);
+
+                if (clampedW > 1 && clampedH > 1) { // Min size
+                    const newRegion = {
                         id: uuidv4(),
-                        name: `Zone ${zones.length + 1}`,
-                        color: zones.length > 0 ? zones[zones.length - 1].color : '#3b82f6', // Inherit last color for ease or default
-                        price: zones.length > 0 ? zones[zones.length - 1].price : 100,
-                        x: Math.round(x), y: Math.round(y),
-                        width: Math.round(w), height: Math.round(h)
+                        zoneId: activeZoneId,
+                        x: Math.round(clampedX), y: Math.round(clampedY),
+                        width: Math.round(clampedW), height: Math.round(clampedH)
                     };
-                    updateEventSettings({ zones: [...zones, newZone] });
+
+                    const currentRegions = getRegions();
+                    const newRegionList = performZoneSubtraction(newRegion, currentRegions);
+
+                    updateEventSettings({ zoneRegions: newRegionList });
                 }
             }
             setDrawingZoneStart(null);
@@ -1063,7 +1238,6 @@ const FloorPlanPage = () => {
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
-                flexDirection: 'column',
                 overflow: 'hidden',
                 // Removed padding to align coordinate system (Visual vs Logic)
                 // Header/Nav will overlay the map, which is desired behavior for full-screen maps
@@ -1089,7 +1263,7 @@ const FloorPlanPage = () => {
             }}>
                 {/* LEFT: Back & Context Title */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <Button variant="ghost" size="sm" onClick={() => navigate('/')} title="Back to Events">
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/admin/events')} title="Back to Events">
                         <ArrowLeft size={18} />
                     </Button>
 
@@ -1175,6 +1349,12 @@ const FloorPlanPage = () => {
                             <Button variant={showEventSettings ? 'primary' : 'ghost'} size="sm" onClick={() => setShowEventSettings(!showEventSettings)}>
                                 <Settings size={18} />
                             </Button>
+
+                            <div className="hide-mobile" style={{ height: '20px', width: '1px', background: 'var(--glass-border)', margin: '0 4px' }} />
+
+                            <Button variant="ghost" size="sm" onClick={logout} title="Logout">
+                                <LogOut size={18} />
+                            </Button>
                         </>
                     )}
                 </div>
@@ -1207,6 +1387,32 @@ const FloorPlanPage = () => {
                     }}
                 >
                     <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
+                        <defs>
+                            {/* Outline Filter for Active Zone */}
+                            <filter id="active-zone-glow" x="-50%" y="-50%" width="200%" height="200%">
+                                {/* 1. Make the alpha solid (1.0) regardless of input opacity */}
+                                <feComponentTransfer in="SourceAlpha" result="solidAlpha">
+                                    <feFuncA type="linear" slope="100" />
+                                </feComponentTransfer>
+
+                                {/* 2. Dilate the solid alpha to expand the shape */}
+                                <feMorphology in="solidAlpha" operator="dilate" radius="2" result="dilated" />
+
+                                {/* 3. Create the outline mask: Dilated - SolidOriginal */}
+                                <feComposite in="dilated" in2="solidAlpha" operator="out" result="outline-mask" />
+
+                                {/* 4. Fill the outline mask with White */}
+                                <feFlood floodColor="white" result="white-flood" />
+                                <feComposite in="white-flood" in2="outline-mask" operator="in" result="solid-outline" />
+
+                                {/* 5. Merge: Place Solid Outline on top of Original Graphic */}
+                                <feMerge>
+                                    <feMergeNode in="SourceGraphic" />
+                                    <feMergeNode in="solid-outline" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+
                         {/* Room Floor (Polygon) */}
                         <polygon
                             points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
@@ -1217,21 +1423,42 @@ const FloorPlanPage = () => {
                             style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
                         />
 
-                        {/* Spatial Zones Layer */}
-                        {zones.map(z => (
-                            <rect
-                                key={z.id}
-                                x={z.x * PX_PER_FT}
-                                y={z.y * PX_PER_FT}
-                                width={z.width * PX_PER_FT}
-                                height={z.height * PX_PER_FT}
-                                fill={z.color}
-                                fillOpacity={0.2}
-                                stroke={z.color}
-                                strokeWidth={2 / scale}
-                                style={{ pointerEvents: 'none' }} // Underlying, no clicks (edits via panel?)
-                            />
-                        ))}
+                        {/* Inactive Zones */}
+                        {getRegions().map(r => {
+                            if (activeZoneId && r.zoneId === activeZoneId) return null; // Skip active
+                            const def = zones.find(z => z.id === r.zoneId);
+                            if (!def) return null;
+                            return (
+                                <rect
+                                    key={r.id}
+                                    x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
+                                    width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
+                                    fill={def.color} fillOpacity={0.3}
+                                    stroke="none"
+                                />
+                            );
+                        })}
+
+                        {/* Active Zone Group (With Filter) */}
+                        <g filter="url(#active-zone-glow)">
+                            {getRegions().map(r => {
+                                if (activeZoneId && r.zoneId === activeZoneId) {
+                                    const def = zones.find(z => z.id === r.zoneId);
+                                    if (!def) return null;
+                                    return (
+                                        <rect
+                                            key={r.id}
+                                            x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
+                                            width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
+                                            fill={def.color} fillOpacity={0.4}
+                                            stroke="none" // Key: No stroke here, filter does it
+                                            shapeRendering="crispEdges" // prevent anti-alias cracks
+                                        />
+                                    );
+                                }
+                                return null;
+                            })}
+                        </g>
 
                         {/* Snap Guides */}
                         {isRoomEditing && snapLines.map((line, i) => (
@@ -1477,49 +1704,72 @@ const FloorPlanPage = () => {
 
                         <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', fontSize: '13px', border: '1px solid var(--primary)' }}>
-                                <strong>Draw on Map:</strong> Drag on the floor plan to create a new zone region. New regions inherit the color/price of the last created zone.
+                                <strong>Painting Mode:</strong> Select a zone type below, then drag on the map to paint that area. New shapes overwrite old ones.
                             </div>
 
-                            {zones.slice().reverse().map((zone, i) => {
-                                // We reverse to show top-stack first in list
-                                const realIndex = zones.length - 1 - i;
-                                return (
-                                    <div key={zone.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
-                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                                            <Input
-                                                value={zone.name}
-                                                onChange={(e) => {
-                                                    const newZones = [...zones];
-                                                    newZones[realIndex].name = e.target.value;
-                                                    updateEventSettings({ zones: newZones });
-                                                }}
-                                            />
-                                            <input
-                                                type="color"
-                                                value={zone.color}
-                                                onChange={(e) => {
-                                                    const newZones = [...zones];
-                                                    newZones[realIndex].color = e.target.value;
-                                                    updateEventSettings({ zones: newZones });
-                                                }}
-                                                style={{ width: '40px', height: '40px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                            />
+                            <Button variant="primary" onClick={addZoneType} icon={Plus}>Create New Zone Type</Button>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {zones.map((zone, i) => {
+                                    const isActive = activeZoneId === zone.id;
+                                    return (
+                                        <div
+                                            key={zone.id}
+                                            onClick={() => setActiveZoneId(zone.id)}
+                                            style={{
+                                                background: isActive ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                                                border: isActive ? `2px solid ${zone.color}` : '2px solid transparent',
+                                                padding: '12px', borderRadius: '8px', cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                                {/* Color Preview / Edit */}
+                                                <input
+                                                    type="color"
+                                                    value={zone.color}
+                                                    onClick={(e) => e.stopPropagation()} // Prevent select toggle?
+                                                    onChange={(e) => {
+                                                        const newZones = [...zones];
+                                                        newZones[i].color = e.target.value;
+                                                        updateEventSettings({ zones: newZones });
+                                                    }}
+                                                    style={{ width: '32px', height: '32px', border: 'none', borderRadius: '4px', cursor: 'pointer', flexShrink: 0 }}
+                                                />
+
+                                                <div style={{ flex: 1 }}>
+                                                    <Input
+                                                        value={zone.name}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onChange={(e) => {
+                                                            const newZones = [...zones];
+                                                            newZones[i].name = e.target.value;
+                                                            updateEventSettings({ zones: newZones });
+                                                        }}
+                                                        placeholder="Zone Name"
+                                                        style={{ marginBottom: '4px' }}
+                                                    />
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>$</span>
+                                                        <Input
+                                                            type="number"
+                                                            value={zone.price}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onChange={(e) => {
+                                                                const newZones = [...zones];
+                                                                newZones[i].price = e.target.value;
+                                                                updateEventSettings({ zones: newZones });
+                                                            }}
+                                                            style={{ height: '28px', fontSize: '12px' }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); deleteZoneType(zone.id); }}><Trash2 size={16} /></Button>
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <Input
-                                                type="number" label="Price"
-                                                value={zone.price}
-                                                onChange={(e) => {
-                                                    const newZones = [...zones];
-                                                    newZones[realIndex].price = e.target.value;
-                                                    updateEventSettings({ zones: newZones });
-                                                }}
-                                            />
-                                            <Button variant="danger" size="sm" onClick={() => deleteZone(zone.id)}><Trash2 size={16} /></Button>
-                                        </div>
-                                    </div>
-                                )
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 )

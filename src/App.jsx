@@ -27,11 +27,16 @@ const RequireAuth = () => {
 // Admin Layout with Logout
 const AdminLayout = () => {
   const { logout } = useAuth();
+  const location = useLocation();
+  const isLayoutPage = location.pathname.includes('/layout');
+
   return (
     <>
-      <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}>
-        <Button variant="ghost" size="sm" onClick={logout} icon={LogOut}>Logout</Button>
-      </div>
+      {!isLayoutPage && (
+        <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}>
+          <Button variant="ghost" size="sm" onClick={logout} icon={LogOut}>Logout</Button>
+        </div>
+      )}
       <Outlet />
     </>
   )
@@ -134,7 +139,7 @@ function App() {
             <Route path="/admin" element={<RequireAuth />}>
               <Route element={<AdminLayout />}>
                 <Route path="events" element={<EventsPage />} />
-                <Route path="events/:eventId/layout" element={<><EventHeader /><FloorPlanPage /><EventNavigation /></>} />
+                <Route path="events/:eventId/layout" element={<><FloorPlanPage /><EventNavigation /></>} />
                 <Route path="events/:eventId/vendors" element={<><EventHeader /><VendorsPage /><EventNavigation /></>} />
                 <Route path="events/:eventId/accounting" element={<><EventHeader /><AccountingPage /><EventNavigation /></>} />
                 <Route path="events/:eventId/agreements" element={<><EventHeader /><AgreementsPage /><EventNavigation /></>} />
