@@ -114,6 +114,28 @@ const PublicBookingPage = () => {
 
     // --- STEPS ---
 
+    // Helper: Find which zone a table belongs to (Explicit or Spatial)
+    const getZoneForTable = (table) => {
+        // 1. Explicit Assignment (Legacy)
+        if (table.zoneId) {
+            const z = zones.find(z => z.id === table.zoneId);
+            if (z) return z;
+        }
+
+        // 2. Spatial Lookup (Table center inside Zone Region)
+        const regions = event?.settings?.zoneRegions || [];
+        const tx = table.x + (table.width || 8) / 2;
+        const ty = table.y + (table.height || 3) / 2;
+
+        const region = regions.find(r =>
+            tx >= r.x && tx <= r.x + r.width &&
+            ty >= r.y && ty <= r.y + r.height
+        );
+
+        if (region) return zones.find(z => z.id === region.zoneId);
+        return null;
+    };
+
     // Step 1: Map Selection
     if (step === 1) {
         return (
@@ -190,7 +212,7 @@ const PublicBookingPage = () => {
                             {tables.map(table => {
                                 const isTaken = table.status === 'reserved' || table.status === 'occupied';
                                 const isSelected = selectedTableIds.includes(table.id);
-                                const zone = zones.find(z => z.id === table.zoneId);
+                                const zone = getZoneForTable(table);
                                 const color = isTaken ? '#3f3f46' : (isSelected ? 'var(--primary)' : (zone?.color || '#10b981')); // Green avail
 
                                 return (
