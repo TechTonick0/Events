@@ -910,6 +910,10 @@ const FloorPlanPage = () => {
         hasMoved.current = false;
         dragStart.current = { x: clientX, y: clientY };
         initialObjPos.current = { x: table.x, y: table.y };
+
+        // Safety: Ensure we aren't box selecting
+        setIsBoxSelecting(false);
+        setSelectionBox(null);
     };
 
     const handleCanvasDown = (e) => {
@@ -919,7 +923,17 @@ const FloorPlanPage = () => {
             setIsPanning(false);
             setIsDraggingTable(false);
             isDraggingTableRef.current = false;
+            // CRITICAL FIX: Clear Box Selection if we switch to Pinch
+            setIsBoxSelecting(false);
+            setSelectionBox(null);
+
             lastTouchDistance.current = getTouchDistance(e.touches);
+            return;
+        }
+
+        // CRITICAL FIX: If we touched a table, DO NOT start Box Select or Pan
+        // This lets the Table's onTouchStart/onMouseDown handle it.
+        if (e.target.closest('.map-table') || e.target.closest('circle')) {
             return;
         }
 
