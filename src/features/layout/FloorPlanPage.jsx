@@ -1572,6 +1572,32 @@ const FloorPlanPage = () => {
                             </mask>
                         </defs>
 
+                        {/* Room Floor (Polygon) */}
+                        <polygon
+                            points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
+                            fill="rgba(255, 255, 255, 0.03)"
+                            stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
+                            strokeWidth={isRoomEditing ? 4 / scale : 2 / scale}
+                            strokeLinejoin="round"
+                            style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
+                        />
+
+                        {/* Inactive Zones */}
+                        {getRegions().map(r => {
+                            if (activeZoneId && r.zoneId === activeZoneId) return null; // Skip active
+                            const def = zones.find(z => z.id === r.zoneId);
+                            if (!def) return null;
+                            return (
+                                <rect
+                                    key={r.id}
+                                    x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
+                                    width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
+                                    fill={def.color} fillOpacity={0.3}
+                                    stroke="none"
+                                />
+                            );
+                        })}
+
                         {/* 1. Outline Layer (White Blob via Drop Shadow, Masked to show only outside) */}
                         <g
                             style={{ filter: 'drop-shadow(0 0 1px white) drop-shadow(0 0 1px white)' }}
