@@ -1160,17 +1160,26 @@ const FloorPlanPage = () => {
                 const clampedH = Math.min(h, maxH);
 
                 if (clampedW > 1 && clampedH > 1) { // Min size
-                    const newRegion = {
+                    const rawNewRegion = {
                         id: uuidv4(),
                         zoneId: activeZoneId,
                         x: Math.round(clampedX), y: Math.round(clampedY),
                         width: Math.round(clampedW), height: Math.round(clampedH)
                     };
 
-                    const currentRegions = getRegions();
-                    const newRegionList = performZoneSubtraction(newRegion, currentRegions);
+                    // CLIP against the Polygon Boundary immediately
+                    // This creates 0 or more valid pieces
+                    const validNewRegions = clipZonesToRoom([rawNewRegion], roomWidthFt, roomHeightFt, boundary);
 
-                    updateEventSettings({ zoneRegions: newRegionList });
+                    const currentRegions = getRegions();
+                    let updatedList = [...currentRegions];
+
+                    // Process each valid piece: Subtract it from existing, then add it.
+                    for (const piece of validNewRegions) {
+                        updatedList = performZoneSubtraction(piece, updatedList);
+                    }
+
+                    updateEventSettings({ zoneRegions: updatedList });
                 }
             }
             setDrawingZoneStart(null);
