@@ -1600,8 +1600,8 @@ const FloorPlanPage = () => {
                             );
                         })}
 
-                        {/* Active Zone Group (With Filter) */}
-                        <g filter="url(#active-zone-glow)">
+                        {/* Active Zone Group (Simple Stroke instead of Filter) */}
+                        <g>
                             {getRegions().map(r => {
                                 if (activeZoneId && r.zoneId === activeZoneId) {
                                     const def = zones.find(z => z.id === r.zoneId);
@@ -1611,9 +1611,10 @@ const FloorPlanPage = () => {
                                             key={r.id}
                                             x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
                                             width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
-                                            fill={def.color} fillOpacity={0.4}
-                                            stroke="none" // Key: No stroke here, filter does it
-                                            shapeRendering="crispEdges" // prevent anti-alias cracks
+                                            fill={def.color} fillOpacity={0.5}
+                                            stroke="white"
+                                            strokeWidth={2 / scale}
+                                            shapeRendering="crispEdges"
                                         />
                                     );
                                 }
@@ -1861,7 +1862,7 @@ const FloorPlanPage = () => {
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                             <h3 style={{ fontSize: '16px' }}>Manage Zones</h3>
-                            <Button variant="ghost" size="sm" onClick={() => setIsZoneEditing(false)}><X size={18} /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => { setIsZoneEditing(false); setActiveZoneId(null); }}><X size={18} /></Button>
                         </div>
 
                         <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
