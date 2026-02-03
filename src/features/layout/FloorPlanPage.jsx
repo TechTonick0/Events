@@ -114,14 +114,15 @@ const FloorPlanPage = () => {
         if (!containerRef.current || !roomWidthFt || !roomHeightFt) return;
 
         const rect = containerRef.current.getBoundingClientRect();
+        // Use window.innerHeight as fallback for mobile 100vh issues
         const viewportW = rect.width;
-        const viewportH = rect.height;
+        const viewportH = window.innerHeight; // Mobile Safe
 
         const margin = 40;
-        // NAV BAR OFFSET: The bottom nav covers the bottom ~80px.
-        // We need to treat the available height as significantly smaller to ensure the whole map
-        // is visible above the nav bar.
-        const bottomNavOffset = 100; // 64px nav + padding
+        // NAV BAR OFFSET: The bottom nav covers the bottom.
+        // On mobile, browser chrome + nav bar can eat up a lot of space.
+        // Increased to 140px to be safe.
+        const bottomNavOffset = 140;
 
         const availableW = viewportW - margin;
         const availableH = viewportH - margin - bottomNavOffset;
@@ -1668,7 +1669,8 @@ const FloorPlanPage = () => {
                                     boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.2)',
                                     zIndex: isSelected ? 100 : 1, userSelect: 'none',
                                     textAlign: 'center', lineHeight: 1.2,
-                                    transition: isDraggingTableRef.current ? 'none' : 'transform 0.1s'
+                                    transition: isDraggingTableRef.current ? 'none' : 'transform 0.1s',
+                                    touchAction: 'none', // CRITICAL: Prevents browser scrolling/zoom on table drag
                                 }}
                             >
                                 <span className="table-label" style={{ pointerEvents: 'none' }}>{table.label}</span>
