@@ -1536,6 +1536,9 @@ const FloorPlanPage = () => {
                 onMouseMove={handleMove}
                 onMouseUp={handleUp}
                 onMouseLeave={handleUp}
+                onTouchStart={handleCanvasDown}
+                onTouchMove={handleMove}
+                onTouchEnd={handleUp}
             >
                 {/* SVG Layer for Room Boundary */}
                 {/* SVG Layer for Room Boundary */}
@@ -1549,59 +1552,49 @@ const FloorPlanPage = () => {
                 >
                     <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
                         <defs>
-                            {/* Outline Filter for Active Zone */}
-                            <filter id="active-zone-glow" x="-50%" y="-50%" width="200%" height="200%">
-                                {/* 1. Make the alpha solid (1.0) regardless of input opacity */}
-                                <feComponentTransfer in="SourceAlpha" result="solidAlpha">
-                                    <feFuncA type="linear" slope="100" />
-                                </feComponentTransfer>
-
-                                {/* 2. Dilate the solid alpha to expand the shape */}
-                                <feMorphology in="solidAlpha" operator="dilate" radius="2" result="dilated" />
-
-                                {/* 3. Create the outline mask: Dilated - SolidOriginal */}
-                                <feComposite in="dilated" in2="solidAlpha" operator="out" result="outline-mask" />
-
-                                {/* 4. Fill the outline mask with White */}
-                                <feFlood floodColor="white" result="white-flood" />
-                                <feComposite in="white-flood" in2="outline-mask" operator="in" result="solid-outline" />
-
-                                {/* 5. Merge: Place Solid Outline on top of Original Graphic */}
-                                <feMerge>
-                                    <feMergeNode in="SourceGraphic" />
-                                    <feMergeNode in="solid-outline" />
-                                </feMerge>
-                            </filter>
+                            {/* Mask to hide the "inside" of the drop-shadow blob */}
+                            <mask id="zone-mask">
+                                <rect x="-10000" y="-10000" width="20000" height="20000" fill="white" />
+                                {getRegions().map(r => {
+                                    // Cut out the zones from the mask (Black = Hidden)
+                                    if (activeZoneId && r.zoneId === activeZoneId) {
+                                        return (
+                                            <rect
+                                                key={`mask-${r.id}`}
+                                                x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
+                                                width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
+                                                fill="black"
+                                            />
+                                        );
+                                    }
+                                    return null;
+                                })}
+                            </mask>
                         </defs>
 
-                        {/* Room Floor (Polygon) */}
-                        <polygon
-                            points={boundary.map(p => `${p.x * PX_PER_FT},${p.y * PX_PER_FT}`).join(' ')}
-                            fill="rgba(255, 255, 255, 0.03)"
-                            stroke={isRoomEditing ? "var(--primary)" : "var(--primary-glow)"}
-                            strokeWidth={isRoomEditing ? 4 / scale : 2 / scale}
-                            strokeLinejoin="round"
-                            style={{ pointerEvents: isRoomEditing ? 'visiblePainted' : 'none' }}
-                        />
+                        {/* 1. Outline Layer (White Blob via Drop Shadow, Masked to show only outside) */}
+                        <g
+                            style={{ filter: 'drop-shadow(0 0 1px white) drop-shadow(0 0 1px white)' }}
+                            mask="url(#zone-mask)"
+                        >
+                            {getRegions().map(r => {
+                                if (activeZoneId && r.zoneId === activeZoneId) {
+                                    return (
+                                        <rect
+                                            key={`outline-${r.id}`}
+                                            x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
+                                            width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
+                                            fill="white"
+                                            stroke="none"
+                                        />
+                                    );
+                                }
+                                return null;
+                            })}
+                        </g>
 
-                        {/* Inactive Zones */}
-                        {getRegions().map(r => {
-                            if (activeZoneId && r.zoneId === activeZoneId) return null; // Skip active
-                            const def = zones.find(z => z.id === r.zoneId);
-                            if (!def) return null;
-                            return (
-                                <rect
-                                    key={r.id}
-                                    x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
-                                    width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
-                                    fill={def.color} fillOpacity={0.3}
-                                    stroke="none"
-                                />
-                            );
-                        })}
-
-                        {/* Active Zone Group (Unified Outline via Drop Shadow) */}
-                        <g style={{ filter: 'drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white)' }}>
+                        {/* 2. Fill Layer (Transparent, No Stroke) */}
+                        <g>
                             {getRegions().map(r => {
                                 if (activeZoneId && r.zoneId === activeZoneId) {
                                     const def = zones.find(z => z.id === r.zoneId);
