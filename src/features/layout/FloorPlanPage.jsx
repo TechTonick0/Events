@@ -874,7 +874,7 @@ const FloorPlanPage = () => {
     };
 
     const handleTableDown = (e, table) => {
-        e.stopPropagation();
+        // e.stopPropagation(); // REMOVED: Allow bubbling so Container sees the 2nd finger for Pinch/Zoom checks
         if (isZoneEditing) return; // Disable table interaction while painting zones
         if (e.touches && e.touches.length > 1) return; // Allow pinch via container handler if mult-touch
 
@@ -1600,8 +1600,8 @@ const FloorPlanPage = () => {
                             );
                         })}
 
-                        {/* Active Zone Group (Simple Stroke instead of Filter) */}
-                        <g>
+                        {/* Active Zone Group (Unified Outline via Drop Shadow) */}
+                        <g style={{ filter: 'drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white)' }}>
                             {getRegions().map(r => {
                                 if (activeZoneId && r.zoneId === activeZoneId) {
                                     const def = zones.find(z => z.id === r.zoneId);
@@ -1612,8 +1612,7 @@ const FloorPlanPage = () => {
                                             x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
                                             width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
                                             fill={def.color} fillOpacity={0.5}
-                                            stroke="white"
-                                            strokeWidth={2 / scale}
+                                            stroke="none"
                                             shapeRendering="crispEdges"
                                         />
                                     );
