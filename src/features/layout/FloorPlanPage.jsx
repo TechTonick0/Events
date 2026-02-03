@@ -972,8 +972,19 @@ const FloorPlanPage = () => {
     };
 
     const handleMove = (e) => {
-        // Pinch Zoom
-        if (isZooming && e.touches && e.touches.length === 2) {
+        // Pinch Zoom / Pan Catch-up
+        if (e.touches && e.touches.length === 2) {
+            // Check if we entered 2-finger mode "late"
+            if (!isZooming) {
+                setIsZooming(true);
+                setIsPanning(false);
+                setIsBoxSelecting(false);
+                setIsDraggingTable(false);
+                isDraggingTableRef.current = false;
+                setSelectionBox(null);
+                lastTouchDistance.current = getTouchDistance(e.touches);
+            }
+
             e.preventDefault(); // Stop browser pinch
 
             const el = containerRef.current;
@@ -1153,10 +1164,13 @@ const FloorPlanPage = () => {
             // Finalize Zone Paint
             const start = drawingZoneStartRef.current;
             if (selectionBox && activeZoneId) {
-                // Calc dimensions in feet
+                // Calc dimensions in feet (Use REFS for fresh state)
                 const rect = containerRef.current.getBoundingClientRect();
-                const endX = (selectionBox.currentX - rect.left - pan.x) / scale / PX_PER_FT;
-                const endY = (selectionBox.currentY - rect.top - pan.y) / scale / PX_PER_FT;
+                const currentScale = scaleRef.current || 1;
+                const currentPan = panRef.current || { x: 0, y: 0 };
+
+                const endX = (selectionBox.currentX - rect.left - currentPan.x) / currentScale / PX_PER_FT;
+                const endY = (selectionBox.currentY - rect.top - currentPan.y) / currentScale / PX_PER_FT;
 
                 const x = Math.min(start.x, endX);
                 const y = Math.min(start.y, endY);
@@ -1193,6 +1207,47 @@ const FloorPlanPage = () => {
                     for (const piece of validNewRegions) {
                         updatedList = performZoneSubtraction(piece, updatedList);
                     }
+
+                    // OPTIMIZATION: Recompose/Merge adjacent 1x1 fragments into larger rects
+                    // This fixes the "Lag when zoomed" issue by reducing DOM nodes.
+                    const recomposeZones = (regions) => {
+                        const groups = {};
+                        regions.forEach(r => {
+                            if (!groups[r.zoneId]) groups[r.zoneId] = [];
+                            groups[r.zoneId].push(r);
+                        });
+
+                        let merged = [];
+                        Object.keys(groups).forEach(zId => {
+                            let list = groups[zId].map(r => ({ ...r }));
+
+                            // Horizontal Merge
+                            list.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+                            for (let i = list.length - 1; i > 0; i--) {
+                                const curr = list[i];
+                                const prev = list[i - 1];
+                                if (curr.y === prev.y && curr.height === prev.height && (Math.abs((prev.x + prev.width) - curr.x) < 0.01)) {
+                                    prev.width += curr.width;
+                                    list.splice(i, 1);
+                                }
+                            }
+
+                            // Vertical Merge
+                            list.sort((a, b) => (a.x - b.x) || (a.y - b.y));
+                            for (let i = list.length - 1; i > 0; i--) {
+                                const curr = list[i];
+                                const prev = list[i - 1];
+                                if (curr.x === prev.x && curr.width === prev.width && (Math.abs((prev.y + prev.height) - curr.y) < 0.01)) {
+                                    prev.height += curr.height;
+                                    list.splice(i, 1);
+                                }
+                            }
+                            merged = merged.concat(list);
+                        });
+                        return merged;
+                    };
+
+                    updatedList = recomposeZones(updatedList);
 
                     updateEventSettings({ zoneRegions: updatedList });
                 }
