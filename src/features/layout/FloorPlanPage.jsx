@@ -343,27 +343,95 @@ const FloorPlanPage = () => {
         return finalRegions;
     };
 
-    const clipZonesToRoom = (regions, roomW, roomH) => {
-        console.log('Clipping Zones:', { regionsCount: regions.length, roomW, roomH });
+    const isPointInPolygon = (x, y, poly) => {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i].x, yi = poly[i].y;
+            const xj = poly[j].x, yj = poly[j].y;
+            const intersect = ((yi > y) !== (yj > y)) &&
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    };
+
+    const clipZonesToRoom = (regions, roomW, roomH, boundary) => {
+        // 1. Initial clip to bounding box (fast pass)
         const roomRect = { x: 0, y: 0, width: roomW, height: roomH };
-        const newRegions = [];
+        let candidateRegions = [];
 
         for (const r of regions) {
             const intersection = getRectIntersection(r, roomRect);
             if (intersection) {
-                newRegions.push({
-                    ...r,
-                    x: intersection.x,
-                    y: intersection.y,
-                    width: intersection.width,
-                    height: intersection.height
-                });
-            } else {
-                console.log('Dropping Region (Out of bounds):', r);
+                candidateRegions.push({ ...r, ...intersection });
             }
         }
-        console.log('Clipped Zones Result:', newRegions.length);
-        return newRegions;
+
+        // 2. If no complex boundary, we are done
+        if (!boundary || boundary.length < 3) return candidateRegions;
+
+        // 3. Complex Clip: Decompose & Recompose
+        const finalRegions = [];
+
+        for (const r of candidateRegions) {
+            let validCells = [];
+            // Grid scan (1ft increments)
+            for (let y = r.y; y < r.y + r.height; y++) {
+                for (let x = r.x; x < r.x + r.width; x++) {
+                    // Check center of the 1x1 tile
+                    if (isPointInPolygon(x + 0.5, y + 0.5, boundary)) {
+                        validCells.push({ x, y });
+                    }
+                }
+            }
+
+            if (validCells.length === 0) continue;
+
+            // Recompose: Group into Rectangles
+            // Step A: Horizontal Strips
+            validCells.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+            let hStrips = [];
+            let currentStrip = null;
+
+            for (const cell of validCells) {
+                if (currentStrip && cell.y === currentStrip.y && cell.x === currentStrip.x + currentStrip.width) {
+                    currentStrip.width++;
+                } else {
+                    if (currentStrip) hStrips.push(currentStrip);
+                    currentStrip = { x: cell.x, y: cell.y, width: 1, height: 1 };
+                }
+            }
+            if (currentStrip) hStrips.push(currentStrip);
+
+            // Step B: Vertical Merge
+            // Sort by X, then Y
+            hStrips.sort((a, b) => (a.x - b.x) || (a.y - b.y));
+
+            let currentV = null;
+            let vMerged = [];
+
+            for (const strip of hStrips) {
+                if (currentV &&
+                    strip.x === currentV.x &&
+                    strip.width === currentV.width &&
+                    strip.y === currentV.y + currentV.height) {
+                    // Merge vertically
+                    currentV.height += strip.height;
+                } else {
+                    if (currentV) vMerged.push(currentV);
+                    currentV = { ...strip };
+                }
+            }
+            if (currentV) vMerged.push(currentV);
+
+            // Add back to final list with original props
+            for (const piece of vMerged) {
+                finalRegions.push({ ...r, ...piece, id: uuidv4() });
+            }
+        }
+
+        return finalRegions;
     };
 
     const updateEventTables = (newTables) => {
@@ -398,12 +466,23 @@ const FloorPlanPage = () => {
                 // Cleanup Zones logic
                 const currentRegions = updatedEvent.settings.zoneRegions || [];
                 if (currentRegions.length > 0) {
-                    updatedEvent.settings.zoneRegions = clipZonesToRoom(currentRegions, newW, newH);
+                    const currentBoundary = updatedEvent.settings.boundary || [];
+                    updatedEvent.settings.zoneRegions = clipZonesToRoom(currentRegions, newW, newH, currentBoundary);
                 }
             }
 
             if (updates.boundary) {
                 updatedEvent.settings.boundary = updates.boundary;
+                // Also trigger cleanup when boundary shape changes
+                const currentRegions = updatedEvent.settings.zoneRegions || [];
+                if (currentRegions.length > 0) {
+                    updatedEvent.settings.zoneRegions = clipZonesToRoom(
+                        currentRegions,
+                        updatedEvent.settings.width,
+                        updatedEvent.settings.height,
+                        updates.boundary
+                    );
+                }
             }
 
             // Explicit zoneRegions update overrides automatic clipping if both present
