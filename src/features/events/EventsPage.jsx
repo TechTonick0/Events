@@ -40,7 +40,7 @@ const EventsPage = () => {
         setEvents([...events, event]);
         setIsCreating(false);
         setNewEvent({ name: '', date: '', width: 100, height: 100 });
-        navigate(`/events/${eventId}/layout`);
+        navigate(`/admin/events/${eventId}/layout`);
     };
 
     const handleDelete = (e, eventId) => {

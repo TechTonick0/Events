@@ -150,6 +150,9 @@ function App() {
             </Route>
 
             {/* Root Redirect removed */}
+
+            {/* Catch-All: Redirect unknown routes to events */}
+            <Route path="*" element={<Navigate to="/admin/events" replace />} />
           </Routes>
         </div>
       </BrowserRouter>
