@@ -113,9 +113,10 @@ const FloorPlanPage = () => {
         tableCount: 40,
         tableWidth: 8,
         tableDepth: 3,
-        aisleWidth: 6,
-        vendorGap: 4,
-        margin: 5
+        aisleWidth: 10,      // Wide patron walking aisle
+        vendorGap: 2,        // Tight vendor access behind tables
+        margin: 5,
+        tablesPerIsland: 4   // Tables wide per island cluster
     });
 
 
@@ -307,10 +308,7 @@ const FloorPlanPage = () => {
     };
 
     const generateAutoLayout = () => {
-        const { tableCount, tableWidth, tableDepth, aisleWidth, vendorGap, margin } = autoLayoutConfig;
-
-        // Island configuration (how many tables wide each cluster is)
-        const tablesPerIsland = 4; // Can be made configurable later
+        const { tableCount, tableWidth, tableDepth, aisleWidth, vendorGap, margin, tablesPerIsland } = autoLayoutConfig;
 
         // Island dimensions
         const islandWidth = tablesPerIsland * tableWidth;
@@ -2204,12 +2202,20 @@ const FloorPlanPage = () => {
                             />
                         </div>
 
-                        <Input
-                            label="Margin from Walls (ft)"
-                            type="number"
-                            value={autoLayoutConfig.margin}
-                            onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, margin: parseFloat(e.target.value) || 0 })}
-                        />
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <Input
+                                label="Margin (ft)"
+                                type="number"
+                                value={autoLayoutConfig.margin}
+                                onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, margin: parseFloat(e.target.value) || 0 })}
+                            />
+                            <Input
+                                label="Island Width"
+                                type="number"
+                                value={autoLayoutConfig.tablesPerIsland}
+                                onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, tablesPerIsland: parseInt(e.target.value) || 2 })}
+                            />
+                        </div>
 
                         <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
