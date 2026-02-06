@@ -280,67 +280,112 @@ const FloorPlanPage = () => {
     };
 
     // --- AUTO-LAYOUT GENERATION ---
+    // Point-in-polygon check using ray casting algorithm
+    const pointInPolygon = (point, polygon) => {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i].x, yi = polygon[i].y;
+            const xj = polygon[j].x, yj = polygon[j].y;
+            if (((yi > point.y) !== (yj > point.y)) &&
+                (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    };
+
+    // Check if entire table rectangle is inside polygon
+    const tableInsidePolygon = (x, y, w, h, polygon) => {
+        // Check all 4 corners
+        const corners = [
+            { x: x, y: y },
+            { x: x + w, y: y },
+            { x: x + w, y: y + h },
+            { x: x, y: y + h }
+        ];
+        return corners.every(corner => pointInPolygon(corner, polygon));
+    };
+
     const generateAutoLayout = () => {
         const { tableCount, tableWidth, tableDepth, aisleWidth, vendorGap, margin } = autoLayoutConfig;
 
-        // Calculate available room dimensions
+        // Island configuration (how many tables wide each cluster is)
+        const tablesPerIsland = 4; // Can be made configurable later
+
+        // Island dimensions
+        const islandWidth = tablesPerIsland * tableWidth;
+        const islandHeight = (2 * tableDepth) + vendorGap; // 2 rows back-to-back
+
+        // Grid spacing (island + aisle)
+        const cellWidth = islandWidth + aisleWidth;
+        const cellHeight = islandHeight + aisleWidth;
+
+        // Calculate how many islands fit in bounding box
         const availableWidth = roomWidthFt - (2 * margin);
         const availableHeight = roomHeightFt - (2 * margin);
 
-        // Tables per row
-        const tablesPerRow = Math.floor(availableWidth / tableWidth);
-        if (tablesPerRow <= 0) {
-            alert('Room is too narrow for the specified table width.');
-            return;
-        }
+        const islandCols = Math.floor((availableWidth + aisleWidth) / cellWidth);
+        const islandRows = Math.floor((availableHeight + aisleWidth) / cellHeight);
 
-        // Row-pair height: Two rows of tables + vendor gap + aisle
-        const rowPairHeight = (tableDepth * 2) + vendorGap + aisleWidth;
-
-        // Number of row-pairs that fit
-        const numRowPairs = Math.floor(availableHeight / rowPairHeight);
-        if (numRowPairs <= 0) {
-            alert('Room is too short for the specified layout.');
+        if (islandCols <= 0 || islandRows <= 0) {
+            alert('Room is too small for the specified layout.');
             return;
         }
 
         const newTables = [];
         let tableIndex = 0;
 
-        for (let rp = 0; rp < numRowPairs && tableIndex < tableCount; rp++) {
-            const rowPairY = margin + (rp * rowPairHeight);
+        // Generate islands in a grid
+        for (let islandRow = 0; islandRow < islandRows && tableIndex < tableCount; islandRow++) {
+            for (let islandCol = 0; islandCol < islandCols && tableIndex < tableCount; islandCol++) {
+                const islandX = margin + (islandCol * cellWidth);
+                const islandY = margin + (islandRow * cellHeight);
 
-            // Top row (tables facing DOWN - vendor space is above)
-            for (let col = 0; col < tablesPerRow && tableIndex < tableCount; col++) {
-                const x = margin + (col * tableWidth);
-                const y = rowPairY;
-                newTables.push({
-                    id: uuidv4(),
-                    x: x,
-                    y: y,
-                    width: tableWidth,
-                    height: tableDepth,
-                    label: `T-${tableIndex + 1}`,
-                    rotation: 0
-                });
-                tableIndex++;
-            }
+                // Top row of tables in this island
+                for (let c = 0; c < tablesPerIsland && tableIndex < tableCount; c++) {
+                    const x = islandX + (c * tableWidth);
+                    const y = islandY;
 
-            // Bottom row (tables facing UP - back-to-back with top row)
-            for (let col = 0; col < tablesPerRow && tableIndex < tableCount; col++) {
-                const x = margin + (col * tableWidth);
-                const y = rowPairY + tableDepth + vendorGap;
-                newTables.push({
-                    id: uuidv4(),
-                    x: x,
-                    y: y,
-                    width: tableWidth,
-                    height: tableDepth,
-                    label: `T-${tableIndex + 1}`,
-                    rotation: 0
-                });
-                tableIndex++;
+                    // Check if table is inside the polygon boundary
+                    if (tableInsidePolygon(x, y, tableWidth, tableDepth, boundary)) {
+                        newTables.push({
+                            id: uuidv4(),
+                            x: x,
+                            y: y,
+                            width: tableWidth,
+                            height: tableDepth,
+                            label: `T-${tableIndex + 1}`,
+                            rotation: 0
+                        });
+                        tableIndex++;
+                    }
+                }
+
+                // Bottom row of tables in this island (back-to-back)
+                for (let c = 0; c < tablesPerIsland && tableIndex < tableCount; c++) {
+                    const x = islandX + (c * tableWidth);
+                    const y = islandY + tableDepth + vendorGap;
+
+                    // Check if table is inside the polygon boundary
+                    if (tableInsidePolygon(x, y, tableWidth, tableDepth, boundary)) {
+                        newTables.push({
+                            id: uuidv4(),
+                            x: x,
+                            y: y,
+                            width: tableWidth,
+                            height: tableDepth,
+                            label: `T-${tableIndex + 1}`,
+                            rotation: 0
+                        });
+                        tableIndex++;
+                    }
+                }
             }
+        }
+
+        if (newTables.length === 0) {
+            alert('No tables could be placed inside the room boundary. Try adjusting the margin or table sizes.');
+            return;
         }
 
         // Apply new tables to event
