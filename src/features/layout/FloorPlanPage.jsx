@@ -113,10 +113,11 @@ const FloorPlanPage = () => {
         tableCount: 40,
         tableWidth: 8,
         tableDepth: 3,
-        aisleWidth: 10,      // Wide patron walking aisle
-        vendorGap: 2,        // Tight vendor access behind tables
+        aisleWidth: 10,
+        vendorGap: 2,
         margin: 5,
-        tablesPerIsland: 4   // Tables wide per island cluster
+        tablesPerIsland: 4,
+        verticalIslands: false  // true = vertical aisles (top entrance), false = horizontal
     });
 
 
@@ -396,13 +397,23 @@ const FloorPlanPage = () => {
         // ========== PHASE 2: INTERIOR ISLANDS ==========
         // Fill the interior with back-to-back island clusters
 
+        const verticalIslands = autoLayoutConfig.verticalIslands;
+
         // Calculate interior region (inset from walls)
         const perimeterInset = VENDOR_SPACE + tableDepth + VISITOR_AISLE;
         const interiorMargin = margin + perimeterInset;
 
-        // Island dimensions
-        const islandWidth = tablesPerIsland * tableWidth;
-        const islandHeight = (2 * tableDepth) + BACK_TO_BACK; // 2 rows with 8ft gap
+        // Island dimensions depend on orientation
+        let islandWidth, islandHeight;
+        if (verticalIslands) {
+            // Vertical islands: tables stacked vertically, aisles run top-to-bottom
+            islandWidth = (2 * tableDepth) + BACK_TO_BACK; // 2 columns with gap
+            islandHeight = tablesPerIsland * tableWidth;    // tables tall
+        } else {
+            // Horizontal islands: tables in rows, aisles run left-to-right
+            islandWidth = tablesPerIsland * tableWidth;
+            islandHeight = (2 * tableDepth) + BACK_TO_BACK;
+        }
 
         // Grid spacing
         const cellWidth = islandWidth + VISITOR_AISLE;
@@ -422,14 +433,26 @@ const FloorPlanPage = () => {
                 const islandX = interiorStartX + (col * cellWidth);
                 const islandY = interiorStartY + (row * cellHeight);
 
-                // Top row of island
-                for (let c = 0; c < tablesPerIsland && tableIndex < tableCount; c++) {
-                    createTable(islandX + (c * tableWidth), islandY, false);
-                }
-
-                // Bottom row of island (back-to-back, 8ft gap)
-                for (let c = 0; c < tablesPerIsland && tableIndex < tableCount; c++) {
-                    createTable(islandX + (c * tableWidth), islandY + tableDepth + BACK_TO_BACK, false);
+                if (verticalIslands) {
+                    // Vertical island: two columns of tables facing each other
+                    // Left column (facing right)
+                    for (let r = 0; r < tablesPerIsland && tableIndex < tableCount; r++) {
+                        createTable(islandX, islandY + (r * tableWidth), true);
+                    }
+                    // Right column (facing left, back-to-back)
+                    for (let r = 0; r < tablesPerIsland && tableIndex < tableCount; r++) {
+                        createTable(islandX + tableDepth + BACK_TO_BACK, islandY + (r * tableWidth), true);
+                    }
+                } else {
+                    // Horizontal island: two rows of tables
+                    // Top row
+                    for (let c = 0; c < tablesPerIsland && tableIndex < tableCount; c++) {
+                        createTable(islandX + (c * tableWidth), islandY, false);
+                    }
+                    // Bottom row (back-to-back)
+                    for (let c = 0; c < tablesPerIsland && tableIndex < tableCount; c++) {
+                        createTable(islandX + (c * tableWidth), islandY + tableDepth + BACK_TO_BACK, false);
+                    }
                 }
             }
         }
@@ -2263,11 +2286,40 @@ const FloorPlanPage = () => {
                                 onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, margin: parseFloat(e.target.value) || 0 })}
                             />
                             <Input
-                                label="Island Width"
+                                label="Island Size"
                                 type="number"
                                 value={autoLayoutConfig.tablesPerIsland}
                                 onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, tablesPerIsland: parseInt(e.target.value) || 2 })}
                             />
+                        </div>
+
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '12px',
+                                background: autoLayoutConfig.verticalIslands ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.05)',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                border: autoLayoutConfig.verticalIslands ? '1px solid var(--success)' : '1px solid var(--glass-border)'
+                            }}
+                            onClick={() => setAutoLayoutConfig({ ...autoLayoutConfig, verticalIslands: !autoLayoutConfig.verticalIslands })}
+                        >
+                            <div style={{
+                                width: '20px', height: '20px', borderRadius: '4px',
+                                background: autoLayoutConfig.verticalIslands ? 'var(--success)' : 'transparent',
+                                border: autoLayoutConfig.verticalIslands ? 'none' : '2px solid var(--text-muted)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                {autoLayoutConfig.verticalIslands && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 500, fontSize: '14px' }}>Vertical Islands</div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                    Aisles run top-to-bottom (for top entrance)
+                                </div>
+                            </div>
                         </div>
 
                         <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
