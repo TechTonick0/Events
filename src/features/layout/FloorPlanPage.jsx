@@ -107,6 +107,17 @@ const FloorPlanPage = () => {
     const drawingZoneStartRef = useRef(null); // Sync ref
     const [activeZoneId, setActiveZoneId] = useState(null); // Which zone type we are painting
 
+    // Auto-Layout State
+    const [showAutoLayout, setShowAutoLayout] = useState(false);
+    const [autoLayoutConfig, setAutoLayoutConfig] = useState({
+        tableCount: 40,
+        tableWidth: 8,
+        tableDepth: 3,
+        aisleWidth: 6,
+        vendorGap: 4,
+        margin: 5
+    });
+
 
 
     // --- AUTO-FIT LOGIC ---
@@ -266,6 +277,80 @@ const FloorPlanPage = () => {
             }
         }
         return null;
+    };
+
+    // --- AUTO-LAYOUT GENERATION ---
+    const generateAutoLayout = () => {
+        const { tableCount, tableWidth, tableDepth, aisleWidth, vendorGap, margin } = autoLayoutConfig;
+
+        // Calculate available room dimensions
+        const availableWidth = roomWidthFt - (2 * margin);
+        const availableHeight = roomHeightFt - (2 * margin);
+
+        // Tables per row
+        const tablesPerRow = Math.floor(availableWidth / tableWidth);
+        if (tablesPerRow <= 0) {
+            alert('Room is too narrow for the specified table width.');
+            return;
+        }
+
+        // Row-pair height: Two rows of tables + vendor gap + aisle
+        const rowPairHeight = (tableDepth * 2) + vendorGap + aisleWidth;
+
+        // Number of row-pairs that fit
+        const numRowPairs = Math.floor(availableHeight / rowPairHeight);
+        if (numRowPairs <= 0) {
+            alert('Room is too short for the specified layout.');
+            return;
+        }
+
+        const newTables = [];
+        let tableIndex = 0;
+
+        for (let rp = 0; rp < numRowPairs && tableIndex < tableCount; rp++) {
+            const rowPairY = margin + (rp * rowPairHeight);
+
+            // Top row (tables facing DOWN - vendor space is above)
+            for (let col = 0; col < tablesPerRow && tableIndex < tableCount; col++) {
+                const x = margin + (col * tableWidth);
+                const y = rowPairY;
+                newTables.push({
+                    id: uuidv4(),
+                    x: x,
+                    y: y,
+                    width: tableWidth,
+                    height: tableDepth,
+                    label: `T-${tableIndex + 1}`,
+                    rotation: 0
+                });
+                tableIndex++;
+            }
+
+            // Bottom row (tables facing UP - back-to-back with top row)
+            for (let col = 0; col < tablesPerRow && tableIndex < tableCount; col++) {
+                const x = margin + (col * tableWidth);
+                const y = rowPairY + tableDepth + vendorGap;
+                newTables.push({
+                    id: uuidv4(),
+                    x: x,
+                    y: y,
+                    width: tableWidth,
+                    height: tableDepth,
+                    label: `T-${tableIndex + 1}`,
+                    rotation: 0
+                });
+                tableIndex++;
+            }
+        }
+
+        // Apply new tables to event
+        const updated = [...events];
+        updated[eventIndex] = {
+            ...updated[eventIndex],
+            tables: autoLabelTables(newTables)
+        };
+        setEvents(updated);
+        setShowAutoLayout(false);
     };
 
     // --- Boolean Logic Helpers ---
@@ -1483,6 +1568,10 @@ const FloorPlanPage = () => {
                                 <Plus size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Add Table</span>
                             </Button>
 
+                            <Button variant="outline" size="sm" onClick={() => setShowAutoLayout(true)} title="Auto-Generate Layout">
+                                <Grid size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Auto Layout</span>
+                            </Button>
+
                             {/* Export Menu */}
                             <div style={{ position: 'relative' }}>
                                 <Button variant={exportMenuOpen ? 'primary' : 'ghost'} size="sm" onClick={() => setExportMenuOpen(!exportMenuOpen)}>
@@ -2009,6 +2098,85 @@ const FloorPlanPage = () => {
                     </div>
                 )
             }
+
+            {/* Auto Layout Modal */}
+            {showAutoLayout && (
+                <div
+                    className="glass-panel mobile-edit-panel"
+                    onTouchStart={(e) => e.stopPropagation()}
+                    style={{
+                        position: 'absolute',
+                        top: '60px', bottom: '80px', right: '0',
+                        width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                        animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
+                        display: 'flex', flexDirection: 'column'
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                        <h3 style={{ fontSize: '16px' }}>Auto Generate Layout</h3>
+                        <Button variant="ghost" size="sm" onClick={() => setShowAutoLayout(false)}><X size={18} /></Button>
+                    </div>
+
+                    <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', fontSize: '13px', border: '1px solid var(--primary)' }}>
+                            <strong>Back-to-Back Rows:</strong> Tables arranged in pairs with vendor space between rows and patron aisles.
+                        </div>
+
+                        <Input
+                            label="Number of Tables"
+                            type="number"
+                            value={autoLayoutConfig.tableCount}
+                            onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, tableCount: parseInt(e.target.value) || 1 })}
+                        />
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <Input
+                                label="Table Width (ft)"
+                                type="number"
+                                value={autoLayoutConfig.tableWidth}
+                                onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, tableWidth: parseFloat(e.target.value) || 1 })}
+                            />
+                            <Input
+                                label="Table Depth (ft)"
+                                type="number"
+                                value={autoLayoutConfig.tableDepth}
+                                onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, tableDepth: parseFloat(e.target.value) || 1 })}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <Input
+                                label="Aisle Width (ft)"
+                                type="number"
+                                value={autoLayoutConfig.aisleWidth}
+                                onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, aisleWidth: parseFloat(e.target.value) || 1 })}
+                            />
+                            <Input
+                                label="Vendor Gap (ft)"
+                                type="number"
+                                value={autoLayoutConfig.vendorGap}
+                                onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, vendorGap: parseFloat(e.target.value) || 1 })}
+                            />
+                        </div>
+
+                        <Input
+                            label="Margin from Walls (ft)"
+                            type="number"
+                            value={autoLayoutConfig.margin}
+                            onChange={(e) => setAutoLayoutConfig({ ...autoLayoutConfig, margin: parseFloat(e.target.value) || 0 })}
+                        />
+
+                        <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                This will replace all existing tables.
+                            </div>
+                            <Button variant="primary" onClick={generateAutoLayout}>
+                                <Grid size={18} /> Generate {autoLayoutConfig.tableCount} Tables
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
 
 
