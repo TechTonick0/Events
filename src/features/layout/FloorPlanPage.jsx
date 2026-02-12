@@ -782,9 +782,23 @@ const FloorPlanPage = () => {
             const container = containerRef.current;
             if (!container) return;
 
-            // Hide Zones for Advertisement mode
+            // Hide Zones & Enhance Visuals for Advertisement mode
             if (type === 'advertisement') {
+                // Hide Zones
                 document.querySelectorAll('.zone-region').forEach(el => el.style.opacity = '0');
+
+                // Thicker Room Boundary
+                document.querySelectorAll('polygon').forEach(el => {
+                    el.dataset.originalStrokeWidth = el.getAttribute('stroke-width');
+                    el.setAttribute('stroke-width', '8'); // Thicker outline
+                    el.style.stroke = 'black'; // Ensure it's black for high contrast
+                });
+
+                // Table Text Outline
+                document.querySelectorAll('.table-label').forEach(el => {
+                    el.style.textShadow = '1px 1px 0 #000, -1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000';
+                    el.style.color = 'white'; // Ensure white text pops
+                });
             }
 
             // Wait for render cycle (if needed) - usually distinct style updates happen sync before html2canvas
@@ -958,18 +972,37 @@ const FloorPlanPage = () => {
             // Restore Zone Visibility if needed (handled by temporary class toggle in caller if implemented that way, 
             // but here we might need to do it manually if we manipulated DOM directly. 
             // For now, let's assume the caller handles the temporary style change or we do it here.)
-            // Re-enabling zone display:
+            // Restore Styles
             if (type === 'advertisement') {
                 document.querySelectorAll('.zone-region').forEach(el => el.style.opacity = '1');
-            }
 
+                document.querySelectorAll('polygon').forEach(el => {
+                    if (el.dataset.originalStrokeWidth) {
+                        el.setAttribute('stroke-width', el.dataset.originalStrokeWidth);
+                        el.style.stroke = ''; // Revert to class/style definition
+                    }
+                });
+
+                document.querySelectorAll('.table-label').forEach(el => {
+                    el.style.textShadow = '';
+                    el.style.color = '';
+                });
+            }
         } catch (err) {
-            console.error(err);
-            alert("Export failed: " + err.message);
-            // Ensure restore happens even on error
+            console.error('Export Error:', err);
+            // Restore Styles on Error
             if (type === 'advertisement') {
                 document.querySelectorAll('.zone-region').forEach(el => el.style.opacity = '1');
+                document.querySelectorAll('polygon').forEach(el => {
+                    if (el.dataset.originalStrokeWidth) el.setAttribute('stroke-width', el.dataset.originalStrokeWidth);
+                    el.style.stroke = '';
+                });
+                document.querySelectorAll('.table-label').forEach(el => {
+                    el.style.textShadow = '';
+                    el.style.color = '';
+                });
             }
+            alert('Failed to generate PDF. Please try again.');
         }
     };
 
