@@ -778,11 +778,30 @@ const FloorPlanPage = () => {
             // Wait for styles to apply
             await new Promise(r => setTimeout(r, 100));
 
-            const canvas = await html2canvas(containerRef.current, {
+            // 1. Capture High-Res Canvas
+            const container = containerRef.current;
+            if (!container) return;
+
+            // Hide Zones for Advertisement mode
+            if (type === 'advertisement') {
+                document.querySelectorAll('.zone-region').forEach(el => el.style.opacity = '0');
+            }
+
+            // Wait for render cycle (if needed) - usually distinct style updates happen sync before html2canvas
+            // but html2canvas needs a moment sometimes.
+            await new Promise(r => setTimeout(r, 100));
+
+            const canvas = await html2canvas(container, {
+                scale: 2, // Retina quality
                 useCORS: true,
-                scale: 2, // High Res
-                backgroundColor: '#ffffff', // White for Print
-                logging: false
+                logging: false,
+                ignoreElements: (element) => {
+                    // Ignore UI overlays
+                    return element.classList.contains('hide-mobile') ||
+                        element.tagName === 'BUTTON' ||
+                        element.innerText === 'Done' ||
+                        element.style.position === 'absolute' && element.style.zIndex === '100';
+                }
             });
 
             // Revert styles & view
@@ -839,10 +858,40 @@ const FloorPlanPage = () => {
 
             pdf.setFontSize(14);
             pdf.setTextColor(80, 80, 80);
+
             if (type === 'tenant') {
                 const vName = vendors.find(v => v.id === vendorId)?.name;
                 const vTables = tables.filter(t => t.vendorId === vendorId).map(t => t.label).join(', ');
                 pdf.text(`Vendor Map: ${vName} (${vTables})`, margin, margin + 45);
+            } else if (type === 'advertisement') {
+                pdf.text('Event Layout & Pricing', margin, margin + 45);
+
+                // --- GENERATE ZONE PRICING LEGEND ---
+                // Add a new page for the legend if needed, or put it on the side if there's room?
+                // For now, let's put it on a new page to ensure it fits nicely.
+                pdf.addPage();
+                pdf.setFontSize(18);
+                pdf.setTextColor(0, 0, 0);
+                pdf.text("Zone Pricing Key", margin, margin + 30);
+
+                let legendY = margin + 60;
+                const sortedZones = [...zones].sort((a, b) => (b.price || 0) - (a.price || 0));
+
+                sortedZones.forEach(zone => {
+                    const price = zone.price ? `$${zone.price}` : 'N/A';
+
+                    // Draw Color Box
+                    pdf.setFillColor(zone.color);
+                    pdf.rect(margin, legendY - 14, 20, 20, 'F');
+
+                    // Draw Text
+                    pdf.setFontSize(14);
+                    pdf.setTextColor(0, 0, 0);
+                    pdf.text(`${zone.name} - ${price}`, margin + 30, legendY);
+
+                    legendY += 30;
+                });
+
             } else {
                 pdf.text('Overall Floor Plan', margin, margin + 45);
 
@@ -888,9 +937,21 @@ const FloorPlanPage = () => {
 
             pdf.save(`${event.name}_FloorPlan_${type}.pdf`);
 
+            // Restore Zone Visibility if needed (handled by temporary class toggle in caller if implemented that way, 
+            // but here we might need to do it manually if we manipulated DOM directly. 
+            // For now, let's assume the caller handles the temporary style change or we do it here.)
+            // Re-enabling zone display:
+            if (type === 'advertisement') {
+                document.querySelectorAll('.zone-region').forEach(el => el.style.opacity = '1');
+            }
+
         } catch (err) {
             console.error(err);
             alert("Export failed: " + err.message);
+            // Ensure restore happens even on error
+            if (type === 'advertisement') {
+                document.querySelectorAll('.zone-region').forEach(el => el.style.opacity = '1');
+            }
         }
     };
 
@@ -1703,6 +1764,7 @@ const FloorPlanPage = () => {
                                         backgroundColor: 'var(--bg-card)'
                                     }}>
                                         <button className="menu-item" onClick={() => handleAdvancedExport('public')}>Full Map (PDF)</button>
+                                        <button className="menu-item" onClick={() => handleAdvancedExport('advertisement')}>Advertisement (PDF)</button>
                                         <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '4px 0' }} />
                                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '4px 8px' }}>VENDOR PACKETS</div>
                                         {vendors.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No vendors added</div>}
