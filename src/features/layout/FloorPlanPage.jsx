@@ -832,7 +832,21 @@ const FloorPlanPage = () => {
             // Header Space
             const headerHeight = 60;
             const contentWidth = docWidth - (margin * 2);
-            const contentHeight = docHeight - (margin * 2) - headerHeight;
+            let availableHeight = docHeight - (margin * 2) - headerHeight;
+
+            // For Advertisement: Reserve space for Legend at the bottom
+            let legendHeight = 0;
+            if (type === 'advertisement') {
+                const zoneCount = zones.length;
+                legendHeight = 50 + (zoneCount * 25);
+
+                const minMapHeight = docHeight * 0.4;
+                if (availableHeight - legendHeight < minMapHeight) {
+                    availableHeight = Math.max(availableHeight - legendHeight, minMapHeight);
+                } else {
+                    availableHeight -= legendHeight;
+                }
+            }
 
             // Image Scaling
             const imgRatio = canvas.width / canvas.height;
@@ -840,9 +854,9 @@ const FloorPlanPage = () => {
             let finalW = contentWidth;
             let finalH = contentWidth / imgRatio;
 
-            if (finalH > contentHeight) {
-                finalH = contentHeight;
-                finalW = contentHeight * imgRatio;
+            if (finalH > availableHeight) {
+                finalH = availableHeight;
+                finalW = availableHeight * imgRatio;
             }
 
             // Center Image
@@ -866,15 +880,19 @@ const FloorPlanPage = () => {
             } else if (type === 'advertisement') {
                 pdf.text('Event Layout & Pricing', margin, margin + 45);
 
-                // --- GENERATE ZONE PRICING LEGEND ---
-                // Add a new page for the legend if needed, or put it on the side if there's room?
-                // For now, let's put it on a new page to ensure it fits nicely.
-                pdf.addPage();
+                // --- GENERATE ZONE PRICING LEGEND (Same Page) ---
+
+                // Position below the map image
+                let legendY = y + finalH + 40;
+
+                // Check if we pushed off page (safety)
+                if (legendY > docHeight - margin) legendY = docHeight - margin - legendHeight;
+
                 pdf.setFontSize(18);
                 pdf.setTextColor(0, 0, 0);
-                pdf.text("Zone Pricing Key", margin, margin + 30);
+                pdf.text("Zone Pricing Key", margin, legendY);
+                legendY += 25;
 
-                let legendY = margin + 60;
                 const sortedZones = [...zones].sort((a, b) => (b.price || 0) - (a.price || 0));
 
                 sortedZones.forEach(zone => {
