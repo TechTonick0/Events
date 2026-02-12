@@ -1878,6 +1878,7 @@ const FloorPlanPage = () => {
                             return (
                                 <rect
                                     key={r.id}
+                                    className="zone-region"
                                     x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
                                     width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
                                     fill={def.color} fillOpacity={0.3}
@@ -1896,6 +1897,7 @@ const FloorPlanPage = () => {
                                     return (
                                         <rect
                                             key={`outline-${r.id}`}
+                                            className="zone-region"
                                             x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
                                             width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
                                             fill="white"
@@ -1916,6 +1918,7 @@ const FloorPlanPage = () => {
                                     return (
                                         <rect
                                             key={r.id}
+                                            className="zone-region"
                                             x={r.x * PX_PER_FT} y={r.y * PX_PER_FT}
                                             width={r.width * PX_PER_FT} height={r.height * PX_PER_FT}
                                             fill={def.color} fillOpacity={0.5}
