@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, X, ZoomIn, ZoomOut, Maximize, RotateCcw, Settings, ArrowLeft, Download, Layers, Grid, Check, LogOut } from 'lucide-react';
+import { Plus, Trash2, X, ZoomIn, ZoomOut, Maximize, RotateCcw, Settings, ArrowLeft, Download, Layers, Grid, Check, LogOut, MapPin, DoorOpen, Mic, ParkingSquare, Star, Square } from 'lucide-react';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../../components/ui/Button';
@@ -19,6 +19,17 @@ const PX_PER_FT = 10;
 // Default "Standard" Table Size in Feet
 const DEFAULT_TABLE_W_FT = 8;
 const DEFAULT_TABLE_H_FT = 3;
+
+// Landmark Icon Presets
+const LANDMARK_ICONS = {
+    entrance: { label: 'Entrance', Icon: DoorOpen },
+    stage: { label: 'Stage', Icon: Mic },
+    restroom: { label: 'Restroom', Icon: Square },
+    parking: { label: 'Parking', Icon: ParkingSquare },
+    custom: { label: 'Custom', Icon: MapPin },
+};
+const DEFAULT_LANDMARK_W_FT = 10;
+const DEFAULT_LANDMARK_H_FT = 10;
 
 const FloorPlanPage = () => {
     const { eventId } = useParams();
@@ -44,6 +55,7 @@ const FloorPlanPage = () => {
     const tables = event?.tables || [];
     const vendors = event?.vendors || [];
     const zones = event?.zones || [];
+    const landmarks = event?.landmarks || [];
 
     // stored in Feet
     const roomWidthFt = event?.settings?.width || 100;
@@ -72,6 +84,7 @@ const FloorPlanPage = () => {
 
     // Selection State
     const [selectedTableIds, setSelectedTableIds] = useState([]);
+    const [selectedLandmarkId, setSelectedLandmarkId] = useState(null);
     const [selectionBox, setSelectionBox] = useState(null); // { startX, startY, currentX, currentY }
     const [isBoxSelecting, setIsBoxSelecting] = useState(false);
 
@@ -86,6 +99,7 @@ const FloorPlanPage = () => {
     const panRef = useRef({ x: 0, y: 0 });
     const isDraggingTableRef = useRef(false); // Validates drag state synchronously
     const draggingTableIdRef = useRef(null); // Track WHICH table is dragging synchronously
+    const draggingLandmarkIdRef = useRef(null); // Track landmark drag
     const selectedTableIdsRef = useRef([]); // Sync Ref
 
     // Sync Refs with State
@@ -645,6 +659,47 @@ const FloorPlanPage = () => {
         setEvents(updatedEvents);
     };
 
+    const updateEventLandmarks = (newLandmarks) => {
+        const updatedEvents = [...events];
+        updatedEvents[eventIndex] = { ...event, landmarks: newLandmarks };
+        setEvents(updatedEvents);
+    };
+
+    const addLandmark = () => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const centerFtX = ((rect.width / 2) - pan.x) / scale / PX_PER_FT;
+        const centerFtY = ((rect.height / 2) - pan.y) / scale / PX_PER_FT;
+
+        const newLandmark = {
+            id: uuidv4(),
+            label: 'Landmark',
+            icon: 'custom',
+            x: Math.round(Math.max(0, Math.min(roomWidthFt - DEFAULT_LANDMARK_W_FT, centerFtX - DEFAULT_LANDMARK_W_FT / 2))),
+            y: Math.round(Math.max(0, Math.min(roomHeightFt - DEFAULT_LANDMARK_H_FT, centerFtY - DEFAULT_LANDMARK_H_FT / 2))),
+            width: DEFAULT_LANDMARK_W_FT,
+            height: DEFAULT_LANDMARK_H_FT,
+            color: '#6b7280',
+        };
+
+        updateEventLandmarks([...landmarks, newLandmark]);
+        setSelectedLandmarkId(newLandmark.id);
+        setSelectedTableIds([]);
+        setShowEventSettings(false);
+    };
+
+    const updateLandmark = (id, updates) => {
+        const newLandmarks = landmarks.map(l => l.id === id ? { ...l, ...updates } : l);
+        updateEventLandmarks(newLandmarks);
+    };
+
+    const deleteLandmark = () => {
+        if (!selectedLandmarkId) return;
+        if (!window.confirm('Delete this landmark?')) return;
+        updateEventLandmarks(landmarks.filter(l => l.id !== selectedLandmarkId));
+        setSelectedLandmarkId(null);
+    };
+
     const updateEventSettings = (updates) => {
         // Create a deep copy of events to avoid mutating state references
         const updatedEvents = events.map((e, i) => {
@@ -1199,6 +1254,7 @@ const FloorPlanPage = () => {
 
         setIsDraggingTable(true);
         isDraggingTableRef.current = true; // Sync update
+        setSelectedLandmarkId(null); // Deselect landmarks
 
         // Multi-Select Logic
         let currentSelection = selectedTableIds;
@@ -1228,6 +1284,27 @@ const FloorPlanPage = () => {
         initialObjPos.current = { x: table.x, y: table.y };
 
         // Safety: Ensure we aren't box selecting
+        setIsBoxSelecting(false);
+        setSelectionBox(null);
+    };
+
+    const handleLandmarkDown = (e, landmark) => {
+        e.stopPropagation();
+        if (isZoneEditing || isRoomEditing) return;
+        if (e.touches && e.touches.length > 1) return;
+
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        draggingLandmarkIdRef.current = landmark.id;
+        setSelectedLandmarkId(landmark.id);
+        setSelectedTableIds([]);
+        setShowEventSettings(false);
+
+        hasMoved.current = false;
+        dragStart.current = { x: clientX, y: clientY };
+        initialObjPos.current = { x: landmark.x, y: landmark.y };
+
         setIsBoxSelecting(false);
         setSelectionBox(null);
     };
@@ -1466,6 +1543,23 @@ const FloorPlanPage = () => {
             updateEventTables(newTables);
         }
 
+        // --- LANDMARK DRAG LOGIC ---
+        if (draggingLandmarkIdRef.current) {
+            e.preventDefault();
+            const deltaFtX = (deltaPxX / scale) / PX_PER_FT;
+            const deltaFtY = (deltaPxY / scale) / PX_PER_FT;
+
+            let nextX = Math.round(initialObjPos.current.x + deltaFtX);
+            let nextY = Math.round(initialObjPos.current.y + deltaFtY);
+
+            const lm = landmarks.find(l => l.id === draggingLandmarkIdRef.current);
+            if (lm) {
+                nextX = Math.max(0, Math.min(nextX, roomWidthFt - (lm.width || DEFAULT_LANDMARK_W_FT)));
+                nextY = Math.max(0, Math.min(nextY, roomHeightFt - (lm.height || DEFAULT_LANDMARK_H_FT)));
+                updateLandmark(lm.id, { x: nextX, y: nextY });
+            }
+        }
+
         if (isPanning) {
             e.preventDefault();
             setPan({
@@ -1624,6 +1718,7 @@ const FloorPlanPage = () => {
         setIsDraggingTable(false);
         isDraggingTableRef.current = false;
         draggingTableIdRef.current = null;
+        draggingLandmarkIdRef.current = null;
         setIsPanning(false);
         setIsZooming(false);
         setIsBoxSelecting(false);
@@ -1633,6 +1728,7 @@ const FloorPlanPage = () => {
         lastTouchDistance.current = null;
         if (isPanning && !hasMoved.current) {
             setSelectedTableIds([]);
+            setSelectedLandmarkId(null);
             setShowEventSettings(false);
         }
     };
@@ -1797,6 +1893,10 @@ const FloorPlanPage = () => {
 
                             <Button variant="primary" size="sm" onClick={addTable}>
                                 <Plus size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Add Table</span>
+                            </Button>
+
+                            <Button variant="outline" size="sm" onClick={addLandmark} title="Add Landmark">
+                                <MapPin size={18} /> <span className="hide-mobile" style={{ marginLeft: '6px' }}>Landmark</span>
                             </Button>
 
                             <Button variant="outline" size="sm" onClick={() => setShowAutoLayout(true)} title="Auto-Generate Layout">
@@ -2100,6 +2200,52 @@ const FloorPlanPage = () => {
                         );
                     })}
 
+                    {/* Landmarks Layer */}
+                    {landmarks.map(lm => {
+                        if (isRoomEditing) return null;
+                        const isSelected = selectedLandmarkId === lm.id;
+                        const wFt = lm.width || DEFAULT_LANDMARK_W_FT;
+                        const hFt = lm.height || DEFAULT_LANDMARK_H_FT;
+                        const IconComp = LANDMARK_ICONS[lm.icon]?.Icon || MapPin;
+
+                        return (
+                            <div
+                                key={lm.id}
+                                className="map-landmark"
+                                onMouseDown={(e) => handleLandmarkDown(e, lm)}
+                                onTouchStart={(e) => handleLandmarkDown(e, lm)}
+                                style={{
+                                    position: 'absolute',
+                                    left: lm.x * PX_PER_FT,
+                                    top: lm.y * PX_PER_FT,
+                                    width: wFt * PX_PER_FT,
+                                    height: hFt * PX_PER_FT,
+                                    backgroundColor: isSelected
+                                        ? 'rgba(99, 102, 241, 0.35)'
+                                        : `${lm.color || '#6b7280'}33`,
+                                    border: isSelected
+                                        ? '3px dashed var(--primary)'
+                                        : `2px dashed ${lm.color || '#6b7280'}`,
+                                    borderRadius: '8px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexDirection: 'column', gap: '4px',
+                                    color: 'white',
+                                    fontSize: Math.max(11, 11 / scale) + 'px',
+                                    fontWeight: 600,
+                                    cursor: 'grab',
+                                    zIndex: isSelected ? 99 : 0,
+                                    userSelect: 'none',
+                                    textAlign: 'center',
+                                    touchAction: 'none',
+                                    textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                                }}
+                            >
+                                <IconComp size={Math.max(18, 18 / scale)} style={{ pointerEvents: 'none', opacity: 0.9 }} />
+                                <span className="landmark-label" style={{ pointerEvents: 'none', lineHeight: 1.2 }}>{lm.label}</span>
+                            </div>
+                        );
+                    })}
+
 
                 </div>
             </div>
@@ -2187,6 +2333,83 @@ const FloorPlanPage = () => {
                     </div>
                 </div>
             )}
+
+            {/* Right Side Panel: Landmark Edit */}
+            {selectedLandmarkId && !isPanning && !isZooming && (() => {
+                const lm = landmarks.find(l => l.id === selectedLandmarkId);
+                if (!lm) return null;
+                return (
+                    <div
+                        className="glass-panel mobile-edit-panel"
+                        onTouchStart={(e) => e.stopPropagation()}
+                        style={{
+                            position: 'absolute',
+                            top: '60px', bottom: '80px', right: '0',
+                            width: '320px', padding: '20px', borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                            animation: 'slideLeft 0.3s', zIndex: 50, borderRight: 'none',
+                            display: 'flex', flexDirection: 'column'
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                            <h3 style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <MapPin size={18} /> Landmark
+                            </h3>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedLandmarkId(null)}><X size={18} /></Button>
+                        </div>
+
+                        <div className="mobile-scroll-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <Input
+                                label="Label"
+                                value={lm.label}
+                                onChange={(e) => updateLandmark(lm.id, { label: e.target.value })}
+                            />
+
+                            <div>
+                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Icon</label>
+                                <select
+                                    value={lm.icon || 'custom'}
+                                    onChange={(e) => updateLandmark(lm.id, { icon: e.target.value })}
+                                    style={{
+                                        width: '100%', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--glass-border)',
+                                        padding: '8px', borderRadius: '4px', color: 'white', outline: 'none', marginTop: '4px'
+                                    }}
+                                >
+                                    {Object.entries(LANDMARK_ICONS).map(([key, val]) => (
+                                        <option key={key} value={key}>{val.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <Input
+                                    label="Width (ft)"
+                                    type="number"
+                                    value={lm.width || DEFAULT_LANDMARK_W_FT}
+                                    onChange={(e) => updateLandmark(lm.id, { width: parseFloat(e.target.value) || DEFAULT_LANDMARK_W_FT })}
+                                />
+                                <Input
+                                    label="Height (ft)"
+                                    type="number"
+                                    value={lm.height || DEFAULT_LANDMARK_H_FT}
+                                    onChange={(e) => updateLandmark(lm.id, { height: parseFloat(e.target.value) || DEFAULT_LANDMARK_H_FT })}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Color</label>
+                                <input
+                                    type="color"
+                                    value={lm.color || '#6b7280'}
+                                    onChange={(e) => updateLandmark(lm.id, { color: e.target.value })}
+                                    style={{ width: '100%', height: '36px', cursor: 'pointer', marginTop: '4px', border: 'none', borderRadius: '4px' }}
+                                />
+                            </div>
+
+                            <Button variant="danger" onClick={deleteLandmark} icon={Trash2}>Delete Landmark</Button>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Zone Manager Panel */}
             {
