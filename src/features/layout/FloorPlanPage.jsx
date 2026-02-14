@@ -675,8 +675,8 @@ const FloorPlanPage = () => {
             id: uuidv4(),
             label: 'Landmark',
             icon: 'custom',
-            x: Math.round(Math.max(0, Math.min(roomWidthFt - DEFAULT_LANDMARK_W_FT, centerFtX - DEFAULT_LANDMARK_W_FT / 2))),
-            y: Math.round(Math.max(0, Math.min(roomHeightFt - DEFAULT_LANDMARK_H_FT, centerFtY - DEFAULT_LANDMARK_H_FT / 2))),
+            x: Math.round(centerFtX - DEFAULT_LANDMARK_W_FT / 2),
+            y: Math.round(centerFtY - DEFAULT_LANDMARK_H_FT / 2),
             width: DEFAULT_LANDMARK_W_FT,
             height: DEFAULT_LANDMARK_H_FT,
             color: '#6b7280',
@@ -825,6 +825,7 @@ const FloorPlanPage = () => {
             // Print Mode (Light Background)
             if (containerRef.current) {
                 containerRef.current.classList.add('print-map');
+                containerRef.current.style.overflow = 'visible'; // Ensure off-room landmarks are captured
                 // Only show pop-out labels for individual vendor view
                 if (type === 'tenant') {
                     containerRef.current.classList.add('with-labels');
@@ -864,6 +865,10 @@ const FloorPlanPage = () => {
                 scale: 2, // Retina quality
                 useCORS: true,
                 logging: false,
+                scrollX: 0,
+                scrollY: 0,
+                width: container.scrollWidth,
+                height: container.scrollHeight,
                 ignoreElements: (element) => {
                     // Ignore UI overlays
                     return element.classList.contains('hide-mobile') ||
@@ -877,6 +882,7 @@ const FloorPlanPage = () => {
             if (containerRef.current) {
                 containerRef.current.classList.remove('print-map');
                 containerRef.current.classList.remove('with-labels');
+                containerRef.current.style.overflow = ''; // Restore
             }
             setScale(originalScale);
             setPan(originalPan);
@@ -1554,8 +1560,6 @@ const FloorPlanPage = () => {
 
             const lm = landmarks.find(l => l.id === draggingLandmarkIdRef.current);
             if (lm) {
-                nextX = Math.max(0, Math.min(nextX, roomWidthFt - (lm.width || DEFAULT_LANDMARK_W_FT)));
-                nextY = Math.max(0, Math.min(nextY, roomHeightFt - (lm.height || DEFAULT_LANDMARK_H_FT)));
                 updateLandmark(lm.id, { x: nextX, y: nextY });
             }
         }
