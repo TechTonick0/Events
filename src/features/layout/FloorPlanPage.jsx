@@ -154,17 +154,29 @@ const FloorPlanPage = () => {
         const availableW = viewportW - margin;
         const availableH = viewportH - margin - bottomNavOffset;
 
-        const scaleW = availableW / canvasWidthPx;
-        const scaleH = availableH / canvasHeightPx;
+        // Expand canvas bounds to include out-of-room landmarks
+        const currentLandmarks = event?.landmarks || [];
+        let minX = 0, minY = 0, maxX = roomWidthFt, maxY = roomHeightFt;
+        currentLandmarks.forEach(lm => {
+            minX = Math.min(minX, lm.x);
+            minY = Math.min(minY, lm.y);
+            maxX = Math.max(maxX, lm.x + (lm.width || DEFAULT_LANDMARK_W_FT));
+            maxY = Math.max(maxY, lm.y + (lm.height || DEFAULT_LANDMARK_H_FT));
+        });
+        const totalWidthPx = (maxX - minX) * PX_PER_FT;
+        const totalHeightPx = (maxY - minY) * PX_PER_FT;
+
+        const scaleW = availableW / totalWidthPx;
+        const scaleH = availableH / totalHeightPx;
 
         const newScale = Math.min(scaleW, scaleH);
 
-        const scaledCanvasW = canvasWidthPx * newScale;
-        const scaledCanvasH = canvasHeightPx * newScale;
+        const scaledCanvasW = totalWidthPx * newScale;
+        const scaledCanvasH = totalHeightPx * newScale;
 
         // Center in the AVAILABLE space (shifted up slightly due to bottom offset)
-        const offsetX = (viewportW - scaledCanvasW) / 2;
-        const offsetY = ((viewportH - bottomNavOffset) - scaledCanvasH) / 2; // Center in top portion
+        const offsetX = (viewportW - scaledCanvasW) / 2 - (minX * PX_PER_FT * newScale);
+        const offsetY = ((viewportH - bottomNavOffset) - scaledCanvasH) / 2 - (minY * PX_PER_FT * newScale);
 
         setScale(newScale);
         setPan({ x: offsetX, y: offsetY });
@@ -846,7 +858,7 @@ const FloorPlanPage = () => {
                 // Thicker Room Boundary
                 document.querySelectorAll('polygon').forEach(el => {
                     el.dataset.originalStrokeWidth = el.getAttribute('stroke-width');
-                    el.setAttribute('stroke-width', '8'); // Thicker outline
+                    el.setAttribute('stroke-width', '4'); // Thicker outline
                     el.style.stroke = 'black'; // Ensure it's black for high contrast
                 });
 
@@ -2226,7 +2238,7 @@ const FloorPlanPage = () => {
                                     height: hFt * PX_PER_FT,
                                     backgroundColor: isSelected
                                         ? 'rgba(99, 102, 241, 0.35)'
-                                        : `${lm.color || '#6b7280'}33`,
+                                        : `${lm.color || '#6b7280'}80`,
                                     border: isSelected
                                         ? '3px dashed var(--primary)'
                                         : `2px dashed ${lm.color || '#6b7280'}`,
