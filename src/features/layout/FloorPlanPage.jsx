@@ -1453,7 +1453,7 @@ const FloorPlanPage = () => {
             return;
         }
 
-        if (!isDraggingTableRef.current && !isPanning && draggingVertexIndex === null) return;
+        if (!isDraggingTableRef.current && !isPanning && draggingVertexIndex === null && !draggingLandmarkIdRef.current) return;
 
         if (e.touches && e.touches.length > 1) return; // Don't pan if multi-touch
 
